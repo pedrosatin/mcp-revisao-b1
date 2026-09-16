@@ -13,24 +13,83 @@ type Conteudo = { fonte: string, geradoEm: string, blocos: Bloco[], itens: Item[
 type Preco = { entradaPorToken: number, saidaPorToken: number, provedor: string, janela?: number }
 type Tabela = { precos: Map<string, Preco>, consultadoEm: string }
 type Resposta = { content: { type: 'text', text: string }[], isError?: boolean }
+type Conceito = { slideId: string, texto: string }
 
-// Catálogo de preços por token, mantido pelo projeto LiteLLM e servido como JSON bruto.
-// Consultado a cada execução porque os preços dos provedores mudam sem aviso.
+// Catálogo público do LiteLLM (~2,55 MB, ~68 mil linhas, ~4 mil ids).
+// Essas linhas não entram no contexto do modelo. A tool devolve uma conta
+// ou no máximo 20 ids. O GET pesa no processo, não na janela.
 const PRECOS_URL = process.env.PRECOS_URL
   ?? 'https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json'
-const PRECOS_TTL_MS = Number(process.env.PRECOS_TTL_MIN ?? 360) * 60000
+// Validade do cache em memória: 360 minutos = 6 horas. Preço de provedor
+// muda no máximo algumas vezes por semana, e a aula dura cerca de 2 h.
+// A env PRECOS_TTL_MIN troca o valor em minutos. PRECOS_TTL_MS é o mesmo
+// intervalo em milissegundos, que é o que Date.now() compara.
+const PRECOS_TTL_MIN = Number(process.env.PRECOS_TTL_MIN ?? 360)
+const PRECOS_TTL_MS = PRECOS_TTL_MIN * 60_000
 const TEMPO_LIMITE = Number(process.env.PRECOS_TIMEOUT_MS ?? 15000)
 const DADOS = process.env.DADOS_DIR ?? join(import.meta.dirname, 'dados')
 
 const conteudo = JSON.parse(await readFile(join(DADOS, 'conteudo-b1.json'), 'utf8')) as Conteudo
 const idsDeBloco = conteudo.blocos.map(b => b.id) as [string, ...string[]]
+const itemPorId = new Map(conteudo.itens.map(i => [i.id, i]))
 
 const semAcento = (s: string): string => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
 const texto = (t: string): Resposta => ({ content: [{ type: 'text', text: t }] })
 const falha = (t: string): Resposta => ({ content: [{ type: 'text', text: t }], isError: true })
+const rotuloDoTtl = (): string =>
+  PRECOS_TTL_MIN % 60 === 0 ? `${PRECOS_TTL_MIN / 60} h` : `${PRECOS_TTL_MIN} min`
 
-// Guarda a promessa, e não só o resultado. Chamadas concorrentes chegam antes da
-// primeira terminar, e sem isso cada uma baixaria a tabela de novo.
+// Definições curtas extraídas dos slides da turma B. A tool devolve o texto
+// e o link. O aluno ainda precisa abrir o slide. Os ids apontam para o JSON.
+const CONCEITOS: Record<string, Conceito> = {
+  factory: {
+    slideId: 'padroes-03-factory-trocar-de-provedor',
+    texto: 'createLLMProvider(nome) decide qual função devolver, "gemini" ou "groq". O restante do código pede ILLMProvider e não conhece o provedor.'
+  },
+  strategy: {
+    slideId: 'padroes-04-strategy-comportamento-em-runtime',
+    texto: 'O algoritmo que muda em runtime é a função escolhida no mapa skills. executarSkill(nome, input) despacha para o handler.'
+  },
+  adapter: {
+    slideId: 'padroes-05-adapter-padronizar-resposta-baguncada',
+    texto: 'adaptResponse é função pura. Entra a string bagunçada do provedor e sai o contrato StandardAIResponse.'
+  },
+  observer: {
+    slideId: 'padroes-06-observer-monitorar-execucao-sem-acoplar',
+    texto: 'Quem quer saber o que o agente faz se inscreve com onAgentEvent. O agente emite com emitAgentEvent e não conhece os ouvintes.'
+  },
+  adr: {
+    slideId: 'padroes-09-anatomia-de-um-adr',
+    texto: 'Cinco campos. Título numerado, Status (proposto, aceito ou substituído), Contexto, Decisão, Consequências.'
+  },
+  'prompt-skill-regra': {
+    slideId: 'agentes-06-comparativo-regras-skills-e-prompts',
+    texto: 'Prompt avulso vive no histórico e ativa na digitação. Skill é arquivo acionado sob demanda por contexto. Regra é arquivo de configuração carregado na inicialização, no repositório inteiro.'
+  },
+  rag: {
+    slideId: 'agentes-10-indexacao-de-documentos-no-rag',
+    texto: 'Indexação, uma vez por documento: Documentos, Chunks, Embeddings, Banco vetorial. Consulta: Query, busca semântica, injeção no contexto, LLM.'
+  },
+  'ciclo-tool-calling': {
+    slideId: 'agentes-13-ciclo-de-execucao-de-tool-calling',
+    texto: '1. App envia prompt e schemas. 2. Modelo devolve tool_use. 3. App executa a função. 4. App devolve tool_result. 5. Modelo responde. Quem executa é o runtime, não o modelo.'
+  },
+  injecao: {
+    slideId: 'riscos-04-vetores-de-prompt-injection',
+    texto: 'Direta vem da entrada do usuário. Indireta vem de conteúdo externo no contexto: README, busca, issues, e-mail, tool_result, logs. Três camadas no Opus 5: treino, sondas de entrada, classificador de saída.'
+  }
+}
+const idsDeConceito = Object.keys(CONCEITOS) as [string, ...string[]]
+
+// Cache lazy. O handshake initialize do MCP precisa responder na hora.
+// Baixar 2,55 MB no connect() atrasaria o stdio e, com firewall, faria
+// consultarConteudo esperar 15 s por uma tabela que ele não usa.
+// O gateway do Docker que recria o processo a cada call pagaria o GET
+// em todo spawn. Inspector e `docker run -i` mantêm o processo aberto,
+// então um GET cobre as 6 horas do TTL.
+//
+// Guarda a PROMESSA, não só o Map. Duas tools concorrentes chegam antes
+// da primeira terminar, e sem isso cada uma baixaria o catálogo de novo.
 let cache: Promise<Tabela> | undefined
 let expiraEm = 0
 
@@ -50,7 +109,7 @@ const buscar = async (): Promise<Tabela> => {
       janela: typeof dados.max_input_tokens === 'number' ? dados.max_input_tokens : undefined
     })
   }
-  console.error(`tabela de preços carregada: ${precos.size} modelos de ${PRECOS_URL}`)
+  console.error(`tabela de preços carregada: ${precos.size} modelos, cache válido por ${PRECOS_TTL_MIN} min (${rotuloDoTtl()}), fonte ${PRECOS_URL}`)
   return { precos, consultadoEm: new Date().toISOString() }
 }
 
@@ -68,11 +127,34 @@ const baixarPrecos = (): Promise<Tabela> => {
 const porMilhao = (v: number): number => Number((v * 1_000_000).toFixed(4))
 const dolar = (v: number): string => `US$ ${v.toFixed(6)}`
 
-// Tool 1: busca no índice dos slides da turma e devolve o link de cada slide.
+const idDeSlide = z.string().min(3)
+  .refine(id => itemPorId.has(id), { message: 'slideId inexistente, consulte listarTopicos' })
+
+const slidesDoBloco = (bloco: string): Item[] => conteudo.itens.filter(i => i.bloco === bloco)
+
+const listarTopicos = async (args: { bloco?: string }): Promise<Resposta> => {
+  const blocos = args.bloco ? conteudo.blocos.filter(b => b.id === args.bloco) : conteudo.blocos
+  const secoes = blocos.map(b => {
+    const itens = slidesDoBloco(b.id)
+    return [
+      `## ${b.titulo} (${b.id}, ${itens.length} slides)`,
+      `aula: ${b.url}`,
+      ...itens.map(i => `- ${i.id} | ${i.titulo}`)
+    ].join('\n')
+  })
+  return texto([
+    `Conteúdo da avaliação B1, ${conteudo.itens.length} slides em ${conteudo.blocos.length} blocos.`,
+    `Fonte: ${conteudo.fonte}. Índice gerado em ${conteudo.geradoEm}.`,
+    'Use o id com obterSlide. O resource b1://conteudo traz a mesma lista com links, quando o cliente anexa.',
+    '',
+    ...secoes
+  ].join('\n\n'))
+}
+
 const consultarConteudo = async (args: { termo: string, bloco?: string, limite?: number }): Promise<Resposta> => {
   const alvo = semAcento(args.termo)
   const palavras = alvo.split(/\s+/).filter(Boolean)
-  const candidatos = args.bloco ? conteudo.itens.filter(i => i.bloco === args.bloco) : conteudo.itens
+  const candidatos = args.bloco ? slidesDoBloco(args.bloco) : conteudo.itens
   const pontuados = candidatos
     .map(item => {
       const campo = semAcento(`${item.titulo} ${item.trecho}`)
@@ -85,7 +167,7 @@ const consultarConteudo = async (args: { termo: string, bloco?: string, limite?:
     .slice(0, args.limite ?? 5)
 
   if (pontuados.length === 0) {
-    return texto(`nenhum slide da B1 casa com "${args.termo}". Blocos disponíveis: ${idsDeBloco.join(', ')}.`)
+    return texto(`nenhum slide da B1 casa com "${args.termo}". Blocos: ${idsDeBloco.join(', ')}. Chame listarTopicos para ver os títulos.`)
   }
   const linhas = pontuados.map(({ item }) =>
     [`## ${item.titulo}`, `bloco: ${item.bloco} | id: ${item.id}`, item.trecho, `link: ${item.url}`].join('\n'))
@@ -93,8 +175,34 @@ const consultarConteudo = async (args: { termo: string, bloco?: string, limite?:
     `Fonte: ${conteudo.fonte}`].join('\n'))
 }
 
-// Tool 2: aplica a fórmula de custo do slide "Medindo o custo de uma chamada"
-// com os preços baixados no momento da chamada.
+const obterSlide = async (args: { slideId: string }): Promise<Resposta> => {
+  const item = itemPorId.get(args.slideId)
+  if (!item) {
+    return falha(`slide ${args.slideId} não encontrado. Consulte listarTopicos.`)
+  }
+  return texto([
+    `## ${item.titulo}`,
+    `id: ${item.id} | bloco: ${item.bloco}`,
+    item.trecho.length > 0 ? item.trecho : '(slide de capa ou de referências, sem trecho indexado)',
+    `link: ${item.url}`
+  ].join('\n'))
+}
+
+const consultarConceito = async (args: { conceito: string }): Promise<Resposta> => {
+  const conceito = CONCEITOS[args.conceito]
+  const slide = itemPorId.get(conceito.slideId)
+  if (!slide) {
+    return falha(`o slide ${conceito.slideId} saiu do índice. Rode gerar-indice.ts de novo.`)
+  }
+  return texto([
+    `## ${args.conceito}`,
+    conceito.texto,
+    '',
+    `slide: ${slide.titulo}`,
+    `link: ${slide.url}`
+  ].join('\n'))
+}
+
 const custoDaChamada = async (args: {
   modelo: string, tokensEntrada: number, tokensSaida: number, chamadas?: number
 }): Promise<Resposta> => {
@@ -111,19 +219,24 @@ const custoDaChamada = async (args: {
   const chamadas = args.chamadas ?? 1
   const custoEntrada = args.tokensEntrada * preco.entradaPorToken * chamadas
   const custoSaida = args.tokensSaida * preco.saidaPorToken * chamadas
+  const tokensDaChamada = args.tokensEntrada + args.tokensSaida
+  const janela = preco.janela
+    ? `janela de contexto: ${preco.janela} tokens (ocupação desta chamada: ${tokensDaChamada})`
+    : 'janela de contexto: o catálogo não informa max_input_tokens para este id'
   return texto([
     `modelo: ${args.modelo} (${preco.provedor})`,
     `preço por milhão de tokens: entrada US$ ${porMilhao(preco.entradaPorToken)}, saída US$ ${porMilhao(preco.saidaPorToken)}`,
+    janela,
     '',
     `entrada: ${args.tokensEntrada} tokens x ${chamadas} chamada(s) = ${dolar(custoEntrada)}`,
     `saída: ${args.tokensSaida} tokens x ${chamadas} chamada(s) = ${dolar(custoSaida)}`,
     `total: ${dolar(custoEntrada + custoSaida)}`,
     '',
-    `preços consultados em ${tabela.consultadoEm} a partir de ${PRECOS_URL}`
+    `preços consultados em ${tabela.consultadoEm} a partir de ${PRECOS_URL}`,
+    `cache em memória válido por ${PRECOS_TTL_MIN} min (${rotuloDoTtl()}) neste processo`
   ].join('\n'))
 }
 
-// Tool 3: descobre os ids aceitos pela tool de custo.
 const listarModelos = async (args: { filtro: string, limite?: number }): Promise<Resposta> => {
   let tabela: Tabela
   try {
@@ -137,15 +250,16 @@ const listarModelos = async (args: { filtro: string, limite?: number }): Promise
     .sort((a, b) => a[0].localeCompare(b[0]))
     .slice(0, args.limite ?? 20)
   if (achados.length === 0) return texto(`nenhum modelo casa com "${args.filtro}" entre ${tabela.precos.size} ids.`)
-  const linhas = achados.map(([id, p]) =>
-    `${id} | ${p.provedor} | entrada US$ ${porMilhao(p.entradaPorToken)}/Mtok | saída US$ ${porMilhao(p.saidaPorToken)}/Mtok`)
+  const linhas = achados.map(([id, p]) => {
+    const janela = p.janela ? ` | janela ${p.janela}` : ''
+    return `${id} | ${p.provedor} | entrada US$ ${porMilhao(p.entradaPorToken)}/Mtok | saída US$ ${porMilhao(p.saidaPorToken)}/Mtok${janela}`
+  })
   return texto([`${achados.length} de ${tabela.precos.size} modelos para "${args.filtro}":`, '', ...linhas].join('\n'))
 }
 
-// Resource: o cliente carrega o índice inteiro no contexto quando o aluno quer o mapa da prova.
 const lerConteudo = async (uri: URL) => {
   const secoes = conteudo.blocos.map(bloco => {
-    const itens = conteudo.itens.filter(i => i.bloco === bloco.id)
+    const itens = slidesDoBloco(bloco.id)
     return [`## ${bloco.titulo} (${itens.length} slides)`, `Aula: ${bloco.url}`, '',
       ...itens.map(i => `- [${i.titulo}](${i.url})`)].join('\n')
   })
@@ -160,24 +274,32 @@ const lerConteudo = async (uri: URL) => {
   }
 }
 
-// Prompt 1: revisão de um tópico, usando a tool de busca e os links da turma.
-const revisarParaProva = ({ topico }: { topico: string }) => ({
-  messages: [{
-    role: 'user' as const,
-    content: {
-      type: 'text' as const,
-      text: [
-        `Quero revisar "${topico}" para a avaliação B1 de Tecnologias Emergentes.`,
-        'Chame a tool consultarConteudo com esse termo e use só os slides que ela devolver.',
-        'Para cada slide, faça uma pergunta por vez e espere minha resposta antes de comentar.',
-        'Depois da minha resposta, compare com o trecho do slide e cite o link para eu conferir.',
-        'Se eu perguntar algo que não aparece nos slides devolvidos, diga que o tema está fora do material da B1.'
-      ].join('\n')
-    }
-  }]
-})
+const revisarParaProva = ({ bloco }: { bloco: string }) => {
+  const b = conteudo.blocos.find(x => x.id === bloco) as Bloco
+  const itens = slidesDoBloco(bloco)
+  const lista = itens.map(i => `- ${i.id} | ${i.titulo}`).join('\n')
+  return {
+    messages: [{
+      role: 'user' as const,
+      content: {
+        type: 'text' as const,
+        text: [
+          `Quero revisar o bloco "${b.titulo}" (${b.id}) para a avaliação B1 de Tecnologias Emergentes.`,
+          `Este bloco tem ${itens.length} slides:`,
+          lista,
+          '',
+          'Conduza a revisão com as tools do servidor mcp-revisao-b1:',
+          '1. Chame obterSlide com o id de um slide da lista, ou consultarConteudo com um termo.',
+          '2. Faça uma pergunta por vez e espere minha resposta antes de comentar.',
+          '3. Depois da minha resposta, compare com o trecho e cite o link para eu conferir.',
+          '4. Se eu perguntar algo que não aparece nos slides deste bloco, diga que o tema está fora do material da B1.',
+          'Use só o conteúdo devolvido pelas tools. Não invente slide que não está na lista.'
+        ].join('\n')
+      }
+    }]
+  }
+}
 
-// Prompt 2: exercício de cálculo de custo, conferido pela tool.
 const exercicioDeCusto = ({ modelo }: { modelo: string }) => ({
   messages: [{
     role: 'user' as const,
@@ -196,8 +318,18 @@ const exercicioDeCusto = ({ modelo }: { modelo: string }) => ({
 
 const servidor = new McpServer({ name: 'mcp-revisao-b1', version: '1.0.0' })
 
+// Tool. O modelo decide quando chamar. A description entra no tools/list
+// de toda conversa, então o mapa da B1 precisa aparecer aqui, não só no
+// resource. Resource só entra no contexto se o cliente anexar.
+
+servidor.registerTool('listarTopicos', {
+  description: 'Lista os 4 blocos da B1 (prompt, padroes, agentes, riscos) e o título de cada slide, com o id para obterSlide. Chame antes de revisar.',
+  inputSchema: { bloco: z.enum(idsDeBloco).optional().describe(`Restringe a um bloco: ${idsDeBloco.join(', ')}`) },
+  annotations: { readOnlyHint: true, openWorldHint: false }
+}, listarTopicos)
+
 servidor.registerTool('consultarConteudo', {
-  description: 'Busca um termo nos slides da avaliação B1 e devolve título, trecho e o link do slides.md da turma.',
+  description: 'Busca um termo nos slides da avaliação B1 e devolve título, trecho e o link do slides.md da turma. Chame listarTopicos se ainda não souber os blocos.',
   inputSchema: {
     termo: z.string().min(2).describe('Palavra ou expressão, ex. prompt injection'),
     bloco: z.enum(idsDeBloco).optional().describe(`Restringe a um bloco: ${idsDeBloco.join(', ')}`),
@@ -206,8 +338,20 @@ servidor.registerTool('consultarConteudo', {
   annotations: { readOnlyHint: true, openWorldHint: false }
 }, consultarConteudo)
 
+servidor.registerTool('obterSlide', {
+  description: 'Devolve o trecho indexado e o link de um slide da B1, pelo id de listarTopicos.',
+  inputSchema: { slideId: idDeSlide.describe('Id de listarTopicos, ex. padroes-03-factory-trocar-de-provedor') },
+  annotations: { readOnlyHint: true, openWorldHint: false }
+}, obterSlide)
+
+servidor.registerTool('consultarConceito', {
+  description: 'Devolve a definição curta gravada no slide, com o link. Conceitos fechados da B1: Factory, Strategy, Adapter, Observer, ADR, regras/skills, RAG, ciclo de tool calling e prompt injection.',
+  inputSchema: { conceito: z.enum(idsDeConceito).describe(`Um de: ${idsDeConceito.join(', ')}`) },
+  annotations: { readOnlyHint: true, openWorldHint: false }
+}, consultarConceito)
+
 servidor.registerTool('custoDaChamada', {
-  description: 'Calcula o custo de uma chamada de LLM a partir da contagem de tokens, com os preços consultados na hora.',
+  description: 'Calcula o custo de uma chamada de LLM a partir da contagem de tokens, com os preços consultados na hora, e informa a janela de contexto do modelo.',
   inputSchema: {
     modelo: z.string().min(2).describe('Id do modelo, ex. claude-opus-5, gemini-2.5-pro'),
     tokensEntrada: z.number().int().min(0).describe('Tokens de entrada, o promptTokenCount da resposta da API'),
@@ -218,7 +362,7 @@ servidor.registerTool('custoDaChamada', {
 }, custoDaChamada)
 
 servidor.registerTool('listarModelos', {
-  description: 'Lista os ids de modelo aceitos por custoDaChamada, filtrando por parte do nome ou pelo provedor.',
+  description: 'Lista os ids de modelo aceitos por custoDaChamada, filtrando por parte do nome ou pelo provedor. Inclui preço por milhão e janela de contexto.',
   inputSchema: {
     filtro: z.string().min(2).describe('Parte do id ou do provedor, ex. claude, gemini, openai'),
     limite: z.number().int().min(1).max(50).optional().describe('Máximo de ids, padrão 20')
@@ -226,16 +370,47 @@ servidor.registerTool('listarModelos', {
   annotations: { readOnlyHint: true, openWorldHint: true }
 }, listarModelos)
 
+// registerResource(nome, uri, metadados, callback)
+//
+// 1. 'conteudo-b1' é o Resource.name. Sai em resources/list. É o id que o
+//    cliente mostra no menu. O mapa interno do SDK indexa pelo URI.
+//
+// 2. 'b1://conteudo' é o Resource.uri, um identificador RFC 3986 com
+//    esquema próprio. A spec deixa o servidor interpretar o URI. O arquivo
+//    dados/conteudo-b1.json é lido na inicialização por readFile, fora
+//    deste registro. O cliente trata b1:// como nome do recurso no
+//    protocolo, sem abrir o identificador no navegador.
+//
+// 3. Quem resolve: o servidor MCP, no handler de resources/read. O SDK
+//    faz new URL(params.uri), encontra o registro e chama lerConteudo.
+//    O esquema b1 fica entre o cliente MCP e este processo.
+//
+// 4. String = URI fixo, entra em resources/list. ResourceTemplate com
+//    {placeholders} iria para resources/templates/list. O índice é um
+//    documento só, então URI fixo basta.
+//
+// 5. O terceiro parâmetro (title, description, mimeType) vai para
+//    resources/list. O quarto é o handler de resources/read. O handler
+//    recebe a URL do pedido e devolve contents[].uri igual ao que o
+//    cliente pediu.
+//
+// Resource é acionado pelo cliente (menu, anexo). Tool é acionada pelo
+// modelo. Prompt é escolhido pelo usuário.
+
 servidor.registerResource('conteudo-b1', 'b1://conteudo', {
   title: 'Conteúdo da avaliação B1',
-  description: 'Índice dos slides cobrados na B1, com link para o slides.md de cada aula da turma',
+  description: 'Índice dos 53 slides cobrados na B1, agrupados em prompt, padroes, agentes e riscos, com link para o slides.md de cada aula da turma',
   mimeType: 'text/markdown'
 }, lerConteudo)
 
+// Prompt. O usuário escolhe no menu do cliente. O argumento virou enum
+// dos 4 blocos para o texto já nascer com a lista de slides, em vez de
+// um tópico livre que o modelo precisaria adivinhar.
+
 servidor.registerPrompt('revisar-para-prova', {
-  title: 'Revisar um tópico da B1',
-  description: 'Revisão socrática de um tópico, com os links dos slides da turma',
-  argsSchema: { topico: z.string().min(3).describe('Tópico da B1, ex. tool calling') }
+  title: 'Revisar um bloco da B1',
+  description: 'Revisão socrática de um bloco da B1. O texto já lista os slides daquele bloco.',
+  argsSchema: { bloco: z.enum(idsDeBloco).describe(`Id do bloco: ${idsDeBloco.join(', ')}`) }
 }, revisarParaProva)
 
 servidor.registerPrompt('exercicio-de-custo', {

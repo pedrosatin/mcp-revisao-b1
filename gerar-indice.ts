@@ -1,5 +1,9 @@
 // Lê os slides.md do repositório da turma e grava dados/conteudo-b1.json com um item por slide.
 // Uso: node gerar-indice.ts ~/Work/unicesumar/2026-tecnologias-emergentes-esoft8s-b
+//
+// O JSON é a fonte que o servidor lê no boot. O URI b1://conteudo, registrado
+// em registerResource, é só o nome do recurso no protocolo MCP. Este script
+// não cria o URI e o URI não aponta para este arquivo.
 
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
