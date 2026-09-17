@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/server'
 import { z } from 'zod'
 import conteudoBruto from '../../dados/conteudo-b1.json'
 import precosBruto from '../../dados/precos-compactos.json'
+import { markdownDoBloco, promptExemplo, promptPlano, textoPlano, textoSorteio } from '../../estudo.ts'
 
 type Item = {
   id: string
@@ -212,6 +213,49 @@ const listarModelos = async (args: { filtro: string, limite?: number }): Promise
   return texto([`${achados.length} de ${precos.size} modelos para "${args.filtro}":`, '', ...linhas].join('\n'))
 }
 
+const sortearRevisao = async (args: { bloco?: string, evitar?: string[] }): Promise<Resposta> =>
+  texto(textoSorteio(conteudo.itens, args))
+
+const planoAteProva = async (args: { bloco?: string }): Promise<Resposta> =>
+  texto(textoPlano(conteudo.itens, conteudo.blocos, args))
+
+const lerBloco = async (uri: URL) => {
+  const id = uri.hostname === 'bloco' ? uri.pathname.replace(/^\//, '') : ''
+  const bloco = conteudo.blocos.find(b => b.id === id)
+  const corpo = bloco
+    ? markdownDoBloco(bloco, conteudo.itens)
+    : `bloco inexistente em ${uri.href}`
+  return { contents: [{ uri: uri.href, mimeType: 'text/markdown', text: corpo }] }
+}
+
+const planoDeEstudo = ({ bloco }: { bloco: string }) => {
+  const b = conteudo.blocos.find(x => x.id === bloco) as Bloco
+  return {
+    messages: [{
+      role: 'user' as const,
+      content: { type: 'text' as const, text: promptPlano(b, conteudo.itens) }
+    }]
+  }
+}
+
+const explicarComExemplo = ({ slideId }: { slideId: string }) => {
+  const slide = itemPorId.get(slideId)
+  if (!slide) {
+    return {
+      messages: [{
+        role: 'user' as const,
+        content: { type: 'text' as const, text: `slide ${slideId} não encontrado. Consulte listarTopicos.` }
+      }]
+    }
+  }
+  return {
+    messages: [{
+      role: 'user' as const,
+      content: { type: 'text' as const, text: promptExemplo(slide) }
+    }]
+  }
+}
+
 const lerConteudo = async (uri: URL) => {
   const secoes = conteudo.blocos.map(bloco => {
     const itens = slidesDoBloco(bloco.id)
@@ -322,6 +366,23 @@ export const criarServidor = (): McpServer => {
     annotations: { readOnlyHint: true, openWorldHint: true }
   }, listarModelos)
 
+  servidor.registerTool('sortearRevisao', {
+    description: 'Sorteia um slide da B1 para o aluno explicar. Sem persistência de progresso. Opcional evitar[] tira ids já vistos nesta sessão.',
+    inputSchema: {
+      bloco: z.enum(idsDeBloco).optional().describe(`Restringe a um bloco: ${idsDeBloco.join(', ')}`),
+      evitar: z.array(z.string()).optional().describe('Ids para não repetir nesta sessão')
+    },
+    annotations: { readOnlyHint: true, openWorldHint: false }
+  }, sortearRevisao)
+
+  servidor.registerTool('planoAteProva', {
+    description: 'Distribui os slides pelos dias até 2026-09-24, na ordem do índice. Sem modelo e sem progresso gravado.',
+    inputSchema: {
+      bloco: z.enum(idsDeBloco).optional().describe(`Restringe a um bloco: ${idsDeBloco.join(', ')}`)
+    },
+    annotations: { readOnlyHint: true, openWorldHint: false }
+  }, planoAteProva)
+
   servidor.registerResource('conteudo-b1', 'b1://conteudo', {
     title: 'Conteúdo da avaliação B1',
     description: 'Índice dos slides da B1 e da aula de MCP, agrupados em prompt, padroes, agentes, riscos e mcp, com link para o slides.md de cada aula da turma',
@@ -339,6 +400,27 @@ export const criarServidor = (): McpServer => {
     description: 'Gera um exercício de cálculo de custo e confere o resultado com a tool',
     argsSchema: { modelo: z.string().min(2).describe('Id do modelo, ex. claude-sonnet-5') }
   }, exercicioDeCusto)
+
+  servidor.registerPrompt('plano-de-estudo', {
+    title: 'Plano de estudo de um bloco',
+    description: 'Pede ao cliente com modelo que chame planoAteProva e conduza o primeiro dia.',
+    argsSchema: { bloco: z.enum(idsDeBloco).describe(`Id do bloco: ${idsDeBloco.join(', ')}`) }
+  }, planoDeEstudo)
+
+  servidor.registerPrompt('explicar-com-exemplo', {
+    title: 'Explicar um slide com exemplo',
+    description: 'Pede explicação do trecho indexado com um exemplo curto em TypeScript funcional.',
+    argsSchema: { slideId: idDeSlide.describe('Id de listarTopicos') }
+  }, explicarComExemplo)
+
+  for (const bloco of conteudo.blocos) {
+    const uri = `b1://bloco/${bloco.id}`
+    servidor.registerResource(`bloco-${bloco.id}`, uri, {
+      title: bloco.titulo,
+      description: `Índice do bloco ${bloco.id}, arquivo ${bloco.aula}/slides.md`,
+      mimeType: 'text/markdown'
+    }, lerBloco)
+  }
 
   return servidor
 }

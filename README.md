@@ -2,7 +2,7 @@
 
 Servidor MCP em TypeScript com o SDK oficial (`@modelcontextprotocol/sdk` 1.30) e schemas em `zod` 4, para estudar a avaliação B1 da disciplina de Tecnologias Emergentes (ESOFT8, UniCesumar).
 
-Ele registra os três primitivos do protocolo: seis tools, um resource e dois prompts. As consultas de conteúdo devolvem o link do `slides.md` da pasta daquela aula no GitHub da turma. O cálculo de custo usa preços consultados na primeira tool de preço do processo e reusa o cache em memória.
+Ele registra os três primitivos do protocolo: oito tools, seis resources e quatro prompts. As consultas de conteúdo devolvem o link do `slides.md` da pasta daquela aula no GitHub da turma. `sortearRevisao` e `planoAteProva` montam revisão e agenda só com o índice, sem chamar modelo. O cálculo de custo usa preços consultados na primeira tool de preço do processo e reusa o cache em memória.
 
 Node 24 executa o `.ts` sem build, por remoção de tipos. O transporte padrão é stdio. HTTP sobe com `--http`. O passo a passo de cada cliente está na seção "Como rodar".
 
@@ -16,9 +16,14 @@ Node 24 executa o `.ts` sem build, por remoção de tipos. O transporte padrão 
 | Tool | `consultarConceito` | definição curta dos padrões, RAG, injeção, primitivos MCP, ciclo e transporte | o modelo |
 | Tool | `custoDaChamada` | aplica a fórmula de custo com os preços do momento e informa a janela | o modelo |
 | Tool | `listarModelos` | lista ids de modelo por nome ou provedor, com preço e janela | o modelo |
+| Tool | `sortearRevisao` | escolhe um slide ao acaso, com opção de não repetir ids | o modelo ou a página |
+| Tool | `planoAteProva` | reparte os slides pelos dias até 24/09/2026 | o modelo ou a página |
 | Resource | `b1://conteudo` | índice completo da B1 em markdown, com link por slide | o cliente |
+| Resource | `b1://bloco/{id}` | índice de um bloco (`prompt`, `padroes`, `agentes`, `riscos`, `mcp`) | o cliente |
 | Prompt | `revisar-para-prova` | revisão socrática de um bloco, com a lista de slides no texto | o usuário |
 | Prompt | `exercicio-de-custo` | exercício de cálculo conferido pela tool | o usuário |
+| Prompt | `plano-de-estudo` | pede ao cliente com modelo que chame `planoAteProva` e comece o dia 1 | o usuário |
+| Prompt | `explicar-com-exemplo` | pede explicação do trecho com um exemplo curto em TypeScript | o usuário |
 
 `listarTopicos` existe porque o modelo só vê as descriptions das tools. O resource `b1://conteudo` lista os mesmos 65 slides, e só entra no contexto quando o cliente anexa. Sem a tool, o prompt de revisão pedia um tópico livre e o modelo inventava o mapa da prova.
 

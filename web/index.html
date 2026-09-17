@@ -32,6 +32,7 @@
     <button type="button" class="aba" role="tab" id="tab-busca" data-aba="busca" aria-selected="false" aria-controls="painel-busca">Busca</button>
     <button type="button" class="aba" role="tab" id="tab-conceito" data-aba="conceito" aria-selected="false" aria-controls="painel-conceito">Conceito</button>
     <button type="button" class="aba" role="tab" id="tab-custo" data-aba="custo" aria-selected="false" aria-controls="painel-custo">Custo</button>
+    <button type="button" class="aba" role="tab" id="tab-estudo" data-aba="estudo" aria-selected="false" aria-controls="painel-estudo">Estudo</button>
   </div>
 
   <main id="principal">
@@ -137,6 +138,85 @@
         </p>
       </form>
       <div id="custo-saida" class="saida" aria-live="polite"></div>
+    </section>
+
+    <section id="painel-estudo" class="painel" data-painel="estudo" role="tabpanel" aria-labelledby="tab-estudo" hidden>
+      <h2>Revisão sem modelo no servidor</h2>
+      <p class="ajuda">Estas tools só leem o índice. O Worker não chama LLM. <code>registerPrompt</code> devolve o texto que um cliente com modelo (Claude, ChatGPT) colocaria no chat.</p>
+
+      <form id="form-sortear" class="form linha">
+        <p>
+          <label for="bloco-sorteio">Bloco</label>
+          <select id="bloco-sorteio" name="bloco">
+            <option value="">todos</option>
+            <option value="prompt">prompt</option>
+            <option value="padroes">padroes</option>
+            <option value="agentes">agentes</option>
+            <option value="riscos">riscos</option>
+            <option value="mcp">mcp</option>
+          </select>
+        </p>
+        <p>
+          <button type="submit">sortearRevisao</button>
+        </p>
+      </form>
+      <div id="sorteio-saida" class="saida" aria-live="polite"></div>
+
+      <form id="form-plano" class="form linha">
+        <p>
+          <label for="bloco-plano">Bloco do plano</label>
+          <select id="bloco-plano" name="bloco">
+            <option value="">todos</option>
+            <option value="prompt">prompt</option>
+            <option value="padroes">padroes</option>
+            <option value="agentes">agentes</option>
+            <option value="riscos">riscos</option>
+            <option value="mcp">mcp</option>
+          </select>
+        </p>
+        <p>
+          <button type="submit">planoAteProva</button>
+        </p>
+      </form>
+      <div id="plano-saida" class="saida" aria-live="polite"></div>
+
+      <h2>Resource e prompt</h2>
+      <form id="form-recurso" class="form linha">
+        <p>
+          <label for="bloco-recurso">URI b1://bloco/…</label>
+          <select id="bloco-recurso" name="bloco" required>
+            <option value="prompt">b1://bloco/prompt</option>
+            <option value="padroes">b1://bloco/padroes</option>
+            <option value="agentes">b1://bloco/agentes</option>
+            <option value="riscos">b1://bloco/riscos</option>
+            <option value="mcp">b1://bloco/mcp</option>
+          </select>
+        </p>
+        <p>
+          <button type="submit">resources/read</button>
+        </p>
+      </form>
+      <div id="recurso-saida" class="saida" aria-live="polite"></div>
+
+      <form id="form-prompt" class="form">
+        <p>
+          <label for="nome-prompt">Prompt</label>
+          <select id="nome-prompt" name="prompt" required>
+            <option value="plano-de-estudo">plano-de-estudo</option>
+            <option value="explicar-com-exemplo">explicar-com-exemplo</option>
+            <option value="revisar-para-prova">revisar-para-prova</option>
+            <option value="exercicio-de-custo">exercicio-de-custo</option>
+          </select>
+        </p>
+        <p>
+          <label for="arg-prompt">Argumento (bloco, slideId ou modelo)</label>
+          <input id="arg-prompt" name="arg" required value="mcp">
+        </p>
+        <p>
+          <button type="submit">prompts/get</button>
+        </p>
+      </form>
+      <div id="prompt-saida" class="saida" aria-live="polite"></div>
     </section>
   </main>
 

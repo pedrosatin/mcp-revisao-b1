@@ -185,6 +185,9 @@ summary:focus-visible {
   min-height: 0;
   overflow: auto;
 }
+.painel h2 + h2, .painel .saida + h2, .painel form + h2 {
+  margin-top: calc(var(--espaco) * 4);
+}
 .painel[hidden] { display: none; }
 #painel-mapa:not([hidden]) {
   display: flex;

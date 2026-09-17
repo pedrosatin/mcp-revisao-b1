@@ -199,6 +199,12 @@ const preencherFicha = (el, texto) => {
       campos.append(arq)
       continue
     }
+    if (linha.startsWith('sorteio: ')) {
+      const s = document.createElement('span')
+      s.textContent = linha.slice(9).trim()
+      campos.append(s)
+      continue
+    }
     if (linha.startsWith('slide: ')) {
       const b = document.createElement('span')
       b.textContent = linha.slice(7)
@@ -409,6 +415,72 @@ $('form-custo').addEventListener('submit', async (ev) => {
       tokensSaida: Number($('tokens-out').value),
       chamadas: Number($('chamadas').value)
     })
+  } catch (erro) {
+    saida.textContent = erro.message
+  }
+})
+
+const vistos = []
+$('form-sortear').addEventListener('submit', async (ev) => {
+  ev.preventDefault()
+  const saida = $('sorteio-saida')
+  saida.textContent = 'sorteando…'
+  try {
+    const args = { evitar: vistos.slice(-40) }
+    const bloco = $('bloco-sorteio').value
+    if (bloco) args.bloco = bloco
+    const texto = await chamarTool('sortearRevisao', args)
+    ligarLinks(saida, texto)
+    const id = texto.match(/^id: (\S+)/m)?.[1]
+    if (id && !vistos.includes(id)) vistos.push(id)
+  } catch (erro) {
+    saida.textContent = erro.message
+  }
+})
+
+$('form-plano').addEventListener('submit', async (ev) => {
+  ev.preventDefault()
+  const saida = $('plano-saida')
+  saida.textContent = 'montando o plano…'
+  try {
+    const args = {}
+    const bloco = $('bloco-plano').value
+    if (bloco) args.bloco = bloco
+    saida.textContent = await chamarTool('planoAteProva', args)
+  } catch (erro) {
+    saida.textContent = erro.message
+  }
+})
+
+$('form-recurso').addEventListener('submit', async (ev) => {
+  ev.preventDefault()
+  const saida = $('recurso-saida')
+  saida.textContent = 'resources/read…'
+  try {
+    const uri = `b1://bloco/${$('bloco-recurso').value}`
+    const result = await mcp('resources/read', { uri })
+    const texto = result.contents?.map(c => c.text).join('\n\n') ?? JSON.stringify(result, null, 2)
+    ligarLinks(saida, texto)
+  } catch (erro) {
+    saida.textContent = erro.message
+  }
+})
+
+$('form-prompt').addEventListener('submit', async (ev) => {
+  ev.preventDefault()
+  const saida = $('prompt-saida')
+  saida.textContent = 'prompts/get…'
+  try {
+    const nome = $('nome-prompt').value
+    const arg = $('arg-prompt').value.trim()
+    const arguments_ = nome === 'explicar-com-exemplo'
+      ? { slideId: arg }
+      : nome === 'exercicio-de-custo'
+        ? { modelo: arg }
+        : { bloco: arg }
+    const result = await mcp('prompts/get', { name: nome, arguments: arguments_ })
+    const textos = (result.messages ?? []).map(m => m.content?.text ?? JSON.stringify(m.content))
+    saida.textContent = textos.join('\n\n') || JSON.stringify(result, null, 2)
   } catch (erro) {
     saida.textContent = erro.message
   }
