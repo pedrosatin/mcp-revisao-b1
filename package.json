@@ -10,7 +10,9 @@
   "scripts": {
     "start": "node servidor.ts",
     "start:http": "node servidor.ts --http",
-    "gerar": "node gerar-indice.ts ../2026-tecnologias-emergentes-esoft8s-b"
+    "gerar": "node gerar-indice.ts ../2026-tecnologias-emergentes-esoft8s-b",
+    "gerar-precos": "node gerar-precos.ts",
+    "deploy:worker": "npm --prefix worker run deploy"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",

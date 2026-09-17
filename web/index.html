@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Revisão B1, cliente MCP</title>
-  <link rel="stylesheet" href="/app.css">
+  <link rel="stylesheet" href="app.css">
 </head>
 <body>
   <a class="skip" href="#principal">Ir para o conteúdo</a>
@@ -94,7 +94,7 @@
 
       <section id="painel-custo" class="painel" data-painel="custo" hidden>
         <h2>Conta de uma chamada</h2>
-        <p class="ajuda">A tool <code>custoDaChamada</code> busca o catálogo LiteLLM na primeira execução deste processo. <code>listarModelos</code> descobre o id aceito.</p>
+        <p class="ajuda">No Node local, <code>custoDaChamada</code> busca o catálogo LiteLLM na primeira execução do processo. No Worker, os preços vêm do JSON compacto gerado em <code>gerar-precos.ts</code>. <code>listarModelos</code> descobre o id aceito.</p>
         <form id="form-modelos" class="form linha">
           <p>
             <label for="filtro">Filtro de modelo</label>
@@ -132,11 +132,16 @@
 
     <aside class="protocolo" aria-label="Tráfego JSON-RPC">
       <h2>JSON-RPC neste tab</h2>
-      <p class="ajuda">Esta página é um cliente MCP. Cada ação abaixo é <code>tools/call</code> em <code>POST /mcp</code>, com o header <code>mcp-session-id</code>.</p>
+      <p class="ajuda">Esta página é um cliente MCP. Cada ação abaixo é <code>tools/call</code> em <code>POST</code> no endpoint configurado. No Node local o servidor devolve <code>mcp-session-id</code>. No Worker da Cloudflare cada POST é independente.</p>
       <ol id="log" reversed></ol>
     </aside>
   </div>
 
-  <script src="/app.js" type="module"></script>
+  <script>
+    window.MCP_URL = location.hostname === 'pedrosatin.github.io'
+      ? 'https://mcp-revisao-b1.satinp-dev.workers.dev/mcp'
+      : '/mcp'
+  </script>
+  <script src="app.js" type="module"></script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-const MCP = '/mcp'
+const MCP = window.MCP_URL ?? '/mcp'
 const PROTOCOLO = '2025-06-18'
 
 let proximoId = 1
@@ -175,24 +175,26 @@ const carregarMapa = async () => {
 }
 
 const conectar = async () => {
-  setStatus('initialize em /mcp…')
+  setStatus(`initialize em ${MCP}…`)
   const init = await mcp('initialize', {
     protocolVersion: PROTOCOLO,
     capabilities: {},
     clientInfo: { name: 'mcp-revisao-b1-web', version: '1.0.0' }
   })
-  await fetch(MCP, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json, text/event-stream',
-      'mcp-session-id': sessao
-    },
-    body: JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' })
-  })
+  if (sessao) {
+    await fetch(MCP, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/event-stream',
+        'mcp-session-id': sessao
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' })
+    })
+  }
   const versao = init.protocolVersion ?? PROTOCOLO
-  const sid = sessao ? sessao.slice(0, 8) : '?'
-  setStatus(`sessão ${sid} · protocolo ${versao} · tools, resources e prompts`, 'ok')
+  const origem = sessao ? `sessão ${sessao.slice(0, 8)}` : 'stateless'
+  setStatus(`${origem} · protocolo ${versao} · ${MCP}`, 'ok')
   await carregarMapa()
 }
 
@@ -264,5 +266,5 @@ $('form-custo').addEventListener('submit', async (ev) => {
 })
 
 conectar().catch(erro => {
-  setStatus(`falha no handshake: ${erro.message}. Confirme que a página veio de node servidor.ts --http.`, 'erro')
+  setStatus(`falha no handshake: ${erro.message}. Local: node servidor.ts --http. Remoto: Worker em ${MCP}.`, 'erro')
 })

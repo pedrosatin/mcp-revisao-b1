@@ -101,6 +101,31 @@ docker run --rm -p 3333:3333 -e MCP_TRANSPORTE=http -e MCP_HOST=0.0.0.0 mcp-revi
 
 A página fica em `http://127.0.0.1:3333/`. O endpoint MCP é `http://127.0.0.1:3333/mcp`. O servidor precisa de saída para `raw.githubusercontent.com` na porta 443. Sem essa saída, só as tools de conteúdo funcionam.
 
+### Worker na Cloudflare e página no GitHub Pages
+
+O endpoint público é um Worker sem sessão (`createMcpHandler`, SDK v2). Cada `POST /mcp` sobe um servidor novo. A página em `web/` é o mesmo cliente HTTP, com `window.MCP_URL` apontando para o Worker quando o host é `pedrosatin.github.io`.
+
+| Superfície | URL |
+|---|---|
+| Página | https://pedrosatin.github.io/mcp-revisao-b1/ |
+| MCP | https://mcp-revisao-b1.satinp-dev.workers.dev/mcp |
+
+O Worker empacota `dados/conteudo-b1.json` e `dados/precos-compactos.json`. Preço no Worker não consulta a rede. Rode `node gerar-precos.ts` e `npm run deploy:worker` quando o catálogo LiteLLM mudar. O processo Node local continua baixando o JSON completo na primeira tool de preço.
+
+```
+cd worker
+npm install
+npx wrangler deploy
+```
+
+A pasta `web/` sobe no GitHub Pages pelo workflow `.github/workflows/pages.yml`. O repositório precisa ser público no plano Free. CORS do Worker aceita `pedrosatin.github.io`, `localhost` e `127.0.0.1`.
+
+Cliente HTTP remoto (Claude Code, Codex, ChatGPT) usa a URL do Worker:
+
+```
+claude mcp add --scope user --transport http revisao-b1-remoto https://mcp-revisao-b1.satinp-dev.workers.dev/mcp
+```
+
 ### Claude Desktop
 
 Arquivo de configuração, lido na inicialização do app:
@@ -260,12 +285,9 @@ O ChatGPT (web e app) fala só com servidor MCP remoto em HTTPS. Stdio local nã
 
 Passo a passo, conta com Developer Mode (Plus, Pro, Team ou Enterprise, conforme a liberação da OpenAI):
 
-1. Suba o servidor em HTTP num host alcançável por HTTPS público. No laboratório da UniCesumar isso costuma falhar por firewall.
-2. Em ChatGPT, Settings, Apps, Developer Mode ligado.
-3. Apps & Connectors, Create. Nome `revisao-b1`. URL no formato `https://seu-host/mcp`, com o caminho `/mcp`.
-4. Abra um chat, ligue o conector e peça `liste os tópicos da B1`.
-
-Sem URL pública, use Claude Desktop, Claude Code, Codex, Antigravity ou AGY neste repositório. Túnel (`cloudflared`, ngrok) é caminho de casa, não de laboratório.
+1. Em ChatGPT, Settings, Apps, Developer Mode ligado.
+2. Apps & Connectors, Create. Nome `revisao-b1`. URL `https://mcp-revisao-b1.satinp-dev.workers.dev/mcp`.
+3. Abra um chat, ligue o conector e peça `liste os tópicos da B1`.
 
 ## De onde vêm os preços
 
@@ -340,7 +362,7 @@ Log em [`evidencias/01-revisao-b1-stdio.log`](evidencias/01-revisao-b1-stdio.log
 - Preço por faixa de contexto, cache de prompt e lote não entram na conta. A tool cobra entrada e saída na tarifa cheia.
 - As âncoras de linha quebram quando os slides da turma mudam sem o índice ser regerado.
 - O servidor não grava nada. Não há registro de progresso de estudo.
-- O teste automatizado ficou no stdio e no `initialize` HTTP. Claude Desktop, Claude Code, Codex, Antigravity e AGY seguem o formato oficial de cada cliente. ChatGPT exige HTTPS público e não foi exercitado neste repositório.
+- O teste automatizado ficou no stdio e no `initialize` HTTP. Claude Desktop, Claude Code, Codex, Antigravity e AGY seguem o formato oficial de cada cliente. O Worker público cobre o HTTPS que o ChatGPT pede.
 - MCP, backoff exponencial e os quatro modos de permissão do CLI ainda não estão nos `slides.md` da turma B. Entram no índice quando a aula for copiada para o GitHub da turma.
 
 A condução em sala está no `apresentacao.md` da disciplina, na Aula 05.
