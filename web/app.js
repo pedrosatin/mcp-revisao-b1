@@ -192,6 +192,13 @@ const preencherFicha = (el, texto) => {
       link = linha.slice(6).trim()
       continue
     }
+    if (linha.startsWith('arquivo: ')) {
+      const arq = document.createElement('span')
+      arq.className = 'arquivo'
+      arq.textContent = linha.slice(9).trim()
+      campos.append(arq)
+      continue
+    }
     if (linha.startsWith('slide: ')) {
       const b = document.createElement('span')
       b.textContent = linha.slice(7)
@@ -211,7 +218,10 @@ const preencherFicha = (el, texto) => {
     a.href = link
     a.target = '_blank'
     a.rel = 'noopener noreferrer'
-    a.textContent = 'Abrir o slide no GitHub da turma'
+    const arquivoEl = el.querySelector('.arquivo')
+    a.textContent = arquivoEl?.textContent
+      ? `Abrir ${arquivoEl.textContent}`
+      : 'Abrir o slide no GitHub da turma'
     el.append(a)
   }
 }
@@ -238,8 +248,13 @@ const parseMapa = (texto) => {
   for (const linha of texto.split('\n')) {
     const cab = linha.match(/^## (.+) \((\w+), (\d+) slides\)$/)
     if (cab) {
-      atual = { titulo: cab[1], id: cab[2], n: cab[3], slides: [] }
+      atual = { titulo: cab[1], id: cab[2], n: cab[3], pasta: '', slides: [] }
       blocos.push(atual)
+      continue
+    }
+    const pasta = linha.match(/^pasta: (.+)$/)
+    if (pasta && atual) {
+      atual.pasta = pasta[1]
       continue
     }
     const item = linha.match(/^- (\S+) \| (.+)$/)
@@ -272,7 +287,7 @@ const desenharMapa = (blocos) => {
     titulo.textContent = bloco.titulo
     const meta = document.createElement('span')
     meta.className = 'meta'
-    meta.textContent = `${bloco.id}, ${bloco.n}`
+    meta.textContent = bloco.pasta ? `${bloco.pasta}` : `${bloco.id}, ${bloco.n}`
     sum.append(titulo, meta)
     const ol = document.createElement('ol')
     for (const slide of bloco.slides) {
@@ -281,13 +296,11 @@ const desenharMapa = (blocos) => {
       b.type = 'button'
       b.className = 'slide-id'
       b.dataset.id = slide.id
-      const idSpan = document.createElement('span')
-      idSpan.className = 'id'
-      idSpan.textContent = slide.id
+      b.title = slide.id
       const titulo = document.createElement('span')
       titulo.className = 'titulo-slide'
       titulo.textContent = slide.titulo
-      b.append(idSpan, titulo)
+      b.append(titulo)
       b.addEventListener('click', () => abrirSlide(slide.id, b))
       li.append(b)
       ol.append(li)

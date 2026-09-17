@@ -16,6 +16,7 @@ type Item = {
 
 const REPO = 'https://github.com/TI-UNICESUMAR/2026-tecnologias-emergentes-esoft8s-b'
 
+// Cada bloco lê o slides.md da pasta daquela aula. O repositório da turma não tem um slides.md na raiz.
 // linhaMinima corta os slides administrativos de abertura, que não entram na avaliação.
 const AULAS: Aula[] = [
   { pasta: '2026-08-05-apresentacao-eng-prompt-contexto', bloco: 'prompt', titulo: 'Prompt e contexto', linhaMinima: 190 },

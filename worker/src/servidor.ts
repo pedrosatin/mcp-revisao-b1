@@ -103,7 +103,7 @@ const listarTopicos = async (args: { bloco?: string }): Promise<Resposta> => {
     const itens = slidesDoBloco(b.id)
     return [
       `## ${b.titulo} (${b.id}, ${itens.length} slides)`,
-      `aula: ${b.url}`,
+      `pasta: ${b.aula}/slides.md`,
       ...itens.map(i => `- ${i.id} | ${i.titulo}`)
     ].join('\n')
   })
@@ -135,7 +135,7 @@ const consultarConteudo = async (args: { termo: string, bloco?: string, limite?:
     return texto(`nenhum slide da B1 casa com "${args.termo}". Blocos: ${idsDeBloco.join(', ')}. Chame listarTopicos para ver os títulos.`)
   }
   const linhas = pontuados.map(({ item }) =>
-    [`## ${item.titulo}`, `bloco: ${item.bloco} | id: ${item.id}`, item.trecho, `link: ${item.url}`].join('\n'))
+    [`## ${item.titulo}`, `bloco: ${item.bloco} | id: ${item.id}`, `arquivo: ${item.aula}/slides.md#L${item.linha}`, item.trecho, `link: ${item.url}`].join('\n'))
   return texto([`${pontuados.length} slide(s) para "${args.termo}":`, '', ...linhas, '',
     `Fonte: ${conteudo.fonte}`].join('\n'))
 }
@@ -148,6 +148,7 @@ const obterSlide = async (args: { slideId: string }): Promise<Resposta> => {
   return texto([
     `## ${item.titulo}`,
     `id: ${item.id} | bloco: ${item.bloco}`,
+    `arquivo: ${item.aula}/slides.md#L${item.linha}`,
     item.trecho.length > 0 ? item.trecho : '(slide de capa ou de referências, sem trecho indexado)',
     `link: ${item.url}`
   ].join('\n'))
@@ -164,6 +165,7 @@ const consultarConceito = async (args: { conceito: string }): Promise<Resposta> 
     conceito.texto,
     '',
     `slide: ${slide.titulo}`,
+    `arquivo: ${slide.aula}/slides.md#L${slide.linha}`,
     `link: ${slide.url}`
   ].join('\n'))
 }
@@ -279,7 +281,7 @@ export const criarServidor = (): McpServer => {
   }, listarTopicos)
 
   servidor.registerTool('consultarConteudo', {
-    description: 'Busca um termo nos slides da avaliação B1 e devolve título, trecho e o link do slides.md da turma. Chame listarTopicos se ainda não souber os blocos.',
+    description: 'Busca um termo nos slides da avaliação B1 e devolve título, trecho e o link do slides.md da pasta daquela aula no GitHub da turma. Chame listarTopicos se ainda não souber os blocos.',
     inputSchema: {
       termo: z.string().min(2).describe('Palavra ou expressão, ex. prompt injection'),
       bloco: z.enum(idsDeBloco).optional().describe(`Restringe a um bloco: ${idsDeBloco.join(', ')}`),

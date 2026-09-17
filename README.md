@@ -2,7 +2,7 @@
 
 Servidor MCP em TypeScript com o SDK oficial (`@modelcontextprotocol/sdk` 1.30) e schemas em `zod` 4, para estudar a avaliação B1 da disciplina de Tecnologias Emergentes (ESOFT8, UniCesumar).
 
-Ele registra os três primitivos do protocolo: seis tools, um resource e dois prompts. As consultas de conteúdo devolvem o link do `slides.md` da turma. O cálculo de custo usa preços consultados na primeira tool de preço do processo e reusa o cache em memória.
+Ele registra os três primitivos do protocolo: seis tools, um resource e dois prompts. As consultas de conteúdo devolvem o link do `slides.md` da pasta daquela aula no GitHub da turma. O cálculo de custo usa preços consultados na primeira tool de preço do processo e reusa o cache em memória.
 
 Node 24 executa o `.ts` sem build, por remoção de tipos. O transporte padrão é stdio. HTTP sobe com `--http`. O passo a passo de cada cliente está na seção "Como rodar".
 
@@ -328,13 +328,13 @@ Em 16/09/2026 os valores do catálogo foram conferidos contra as páginas oficia
 
 ## De onde vem o conteúdo
 
-O `gerar-indice.ts` lê os `slides.md` do repositório da turma e grava `dados/conteudo-b1.json` com um item por slide: título, bloco, trecho de até 220 caracteres, termos de busca e a URL com a âncora de linha.
+O `gerar-indice.ts` lê o `slides.md` de cada pasta de aula no repositório da turma e grava `dados/conteudo-b1.json` com um item por slide: título, bloco, pasta, trecho de até 220 caracteres, termos de busca e a URL com a âncora de linha daquele arquivo.
 
 ```
 node gerar-indice.ts ../2026-tecnologias-emergentes-esoft8s-b
 ```
 
-O índice guarda um trecho curto, não o slide inteiro. A resposta manda o aluno para o `slides.md` da turma, que é a fonte. Rode o gerador de novo sempre que os slides da turma mudarem, porque as âncoras de linha se deslocam.
+O índice guarda um trecho curto, não o slide inteiro. A resposta manda o aluno para o `slides.md` da pasta daquela aula (`2026-09-16-MCP/slides.md#L1`, por exemplo). Rode o gerador de novo sempre que os slides da turma mudarem, porque as âncoras de linha se deslocam.
 
 O URI `b1://conteudo` é o nome do recurso no protocolo. O JSON é lido no boot por `readFile`. O segundo parâmetro de `registerResource` é esse identificador, e o arquivo fica no `readFile` da inicialização.
 
@@ -363,6 +363,6 @@ Log em [`evidencias/01-revisao-b1-stdio.log`](evidencias/01-revisao-b1-stdio.log
 - As âncoras de linha quebram quando os slides da turma mudam sem o índice ser regerado.
 - O servidor não grava nada. Não há registro de progresso de estudo.
 - O teste automatizado ficou no stdio e no `initialize` HTTP. Claude Desktop, Claude Code, Codex, Antigravity e AGY seguem o formato oficial de cada cliente. O Worker público cobre o HTTPS que o ChatGPT pede.
-- MCP, backoff exponencial e os quatro modos de permissão do CLI ainda não estão nos `slides.md` da turma B. Entram no índice quando a aula for copiada para o GitHub da turma.
+- O bloco `mcp` lê `2026-09-16-MCP/slides.md` da turma B. Os quatro modos de permissão do CLI ficam no arquivo de 09/09, junto dos riscos.
 
 A condução em sala está no `apresentacao.md` da disciplina, na Aula 05.
