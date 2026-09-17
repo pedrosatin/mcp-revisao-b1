@@ -103,7 +103,7 @@ A página fica em `http://127.0.0.1:3333/`. O endpoint MCP é `http://127.0.0.1:
 
 ### Worker na Cloudflare e página no GitHub Pages
 
-O endpoint público é um Worker sem sessão (`createMcpHandler`, SDK v2). Cada `POST /mcp` sobe um servidor novo. A página em `web/` é o mesmo cliente HTTP, com `window.MCP_URL` apontando para o Worker quando o host é `pedrosatin.github.io`.
+O endpoint público é um Worker sem sessão. Cada `POST /mcp` sobe um `WebStandardStreamableHTTPServerTransport` com `enableJsonResponse`. O corpo sai em `application/json` (JSON-RPC), para a aba Response do DevTools mostrar o objeto. A página em `web/` é o mesmo cliente HTTP, com `window.MCP_URL` apontando para o Worker quando o host é `pedrosatin.github.io`.
 
 | Superfície | URL |
 |---|---|
