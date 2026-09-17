@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Revisão B1, cliente MCP</title>
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <a class="skip" href="#principal">Ir para o conteúdo</a>
+  <header class="topo">
+    <div class="ident">
+      <p class="marca">mcp-revisao-b1</p>
+      <h1>Revisão da avaliação B1</h1>
+    </div>
+    <p id="status" class="status" role="status">Conectando ao endpoint /mcp…</p>
+  </header>
+
+  <nav class="abas" aria-label="Ferramentas">
+    <button type="button" class="aba ativa" data-aba="mapa" aria-current="page">Mapa da B1</button>
+    <button type="button" class="aba" data-aba="busca">Busca</button>
+    <button type="button" class="aba" data-aba="conceito">Conceito</button>
+    <button type="button" class="aba" data-aba="custo">Custo</button>
+  </nav>
+
+  <div class="grade">
+    <main id="principal">
+      <section id="painel-mapa" class="painel" data-painel="mapa">
+        <div class="duas">
+          <div>
+            <h2>Blocos</h2>
+            <p class="ajuda">A lista vem da tool <code>listarTopicos</code>. Clique num id para chamar <code>obterSlide</code>.</p>
+            <div id="mapa" aria-live="polite"></div>
+          </div>
+          <div>
+            <h2>Slide</h2>
+            <article id="slide" class="slide vazio">Nenhum slide aberto.</article>
+          </div>
+        </div>
+      </section>
+
+      <section id="painel-busca" class="painel" data-painel="busca" hidden>
+        <h2>Busca no índice</h2>
+        <form id="form-busca" class="form">
+          <p>
+            <label for="termo">Termo</label>
+            <input id="termo" name="termo" type="search" required minlength="2" placeholder="prompt injection">
+          </p>
+          <p>
+            <label for="bloco-busca">Bloco</label>
+            <select id="bloco-busca" name="bloco">
+              <option value="">todos</option>
+              <option value="prompt">prompt</option>
+              <option value="padroes">padroes</option>
+              <option value="agentes">agentes</option>
+              <option value="riscos">riscos</option>
+              <option value="mcp">mcp</option>
+            </select>
+          </p>
+          <p>
+            <button type="submit">consultarConteudo</button>
+          </p>
+        </form>
+        <div id="busca-saida" class="saida" aria-live="polite"></div>
+      </section>
+
+      <section id="painel-conceito" class="painel" data-painel="conceito" hidden>
+        <h2>Lookup fechado</h2>
+        <form id="form-conceito" class="form">
+          <p>
+            <label for="conceito">Conceito</label>
+            <select id="conceito" name="conceito" required>
+              <option value="factory">factory</option>
+              <option value="strategy">strategy</option>
+              <option value="adapter">adapter</option>
+              <option value="observer">observer</option>
+              <option value="adr">adr</option>
+              <option value="prompt-skill-regra">prompt-skill-regra</option>
+              <option value="rag">rag</option>
+              <option value="ciclo-tool-calling">ciclo-tool-calling</option>
+              <option value="injecao">injecao</option>
+              <option value="primitivos-mcp">primitivos-mcp</option>
+              <option value="ciclo-mcp">ciclo-mcp</option>
+              <option value="transporte-mcp">transporte-mcp</option>
+              <option value="integracoes-mcp">integracoes-mcp</option>
+            </select>
+          </p>
+          <p>
+            <button type="submit">consultarConceito</button>
+          </p>
+        </form>
+        <div id="conceito-saida" class="saida" aria-live="polite"></div>
+      </section>
+
+      <section id="painel-custo" class="painel" data-painel="custo" hidden>
+        <h2>Conta de uma chamada</h2>
+        <p class="ajuda">A tool <code>custoDaChamada</code> busca o catálogo LiteLLM na primeira execução deste processo. <code>listarModelos</code> descobre o id aceito.</p>
+        <form id="form-modelos" class="form linha">
+          <p>
+            <label for="filtro">Filtro de modelo</label>
+            <input id="filtro" name="filtro" type="search" required minlength="2" value="claude" placeholder="claude, gemini, openai">
+          </p>
+          <p>
+            <button type="submit">listarModelos</button>
+          </p>
+        </form>
+        <div id="modelos-saida" class="saida" aria-live="polite"></div>
+        <form id="form-custo" class="form">
+          <p>
+            <label for="modelo">Id do modelo</label>
+            <input id="modelo" name="modelo" required minlength="2" value="claude-opus-5">
+          </p>
+          <p>
+            <label for="tokens-in">Tokens de entrada</label>
+            <input id="tokens-in" name="tokensEntrada" type="number" min="0" step="1" value="12000" required>
+          </p>
+          <p>
+            <label for="tokens-out">Tokens de saída</label>
+            <input id="tokens-out" name="tokensSaida" type="number" min="0" step="1" value="800" required>
+          </p>
+          <p>
+            <label for="chamadas">Chamadas iguais</label>
+            <input id="chamadas" name="chamadas" type="number" min="1" step="1" value="30" required>
+          </p>
+          <p>
+            <button type="submit">custoDaChamada</button>
+          </p>
+        </form>
+        <div id="custo-saida" class="saida" aria-live="polite"></div>
+      </section>
+    </main>
+
+    <aside class="protocolo" aria-label="Tráfego JSON-RPC">
+      <h2>JSON-RPC neste tab</h2>
+      <p class="ajuda">Esta página é um cliente MCP. Cada ação abaixo é <code>tools/call</code> em <code>POST /mcp</code>, com o header <code>mcp-session-id</code>.</p>
+      <ol id="log" reversed></ol>
+    </aside>
+  </div>
+
+  <script src="/app.js" type="module"></script>
+</body>
+</html>

@@ -1,7 +1,12 @@
+import { randomUUID } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { createMcpExpressApp } from '@modelcontextprotocol/sdk/server/express.js'
+import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
+import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 
 type Item = {
@@ -77,6 +82,22 @@ const CONCEITOS: Record<string, Conceito> = {
   injecao: {
     slideId: 'riscos-04-vetores-de-prompt-injection',
     texto: 'Direta vem da entrada do usuário. Indireta vem de conteúdo externo no contexto: README, busca, issues, e-mail, tool_result, logs. Três camadas no Opus 5: treino, sondas de entrada, classificador de saída.'
+  },
+  'primitivos-mcp': {
+    slideId: 'mcp-04-o-que-um-servidor-mcp-expoe',
+    texto: 'Tools: operação com schema, o modelo aciona. Resources: conteúdo por URI, o cliente anexa. Prompts: instrução parametrizada, o usuário escolhe. O servidor anuncia na inicialização quais oferece.'
+  },
+  'ciclo-mcp': {
+    slideId: 'mcp-06-ciclo-de-uma-chamada-por-mcp',
+    texto: 'initialize, tools/list, schemas no prompt, tool_use, tools/call, content, tool_result. O modelo segue o ciclo de Tool Calling. A execução atravessa o transporte até o servidor.'
+  },
+  'transporte-mcp': {
+    slideId: 'mcp-07-transporte-e-log-do-servidor',
+    texto: 'stdio para subprocesso local. Streamable HTTP para remoto, um endpoint. O envelope JSON-RPC é o mesmo. Log em stderr, porque stdout carrega o protocolo.'
+  },
+  'integracoes-mcp': {
+    slideId: 'mcp-03-integracoes-com-o-protocolo-mcp',
+    texto: 'Cada cliente e cada servidor implementam a spec uma vez. Três clientes e duas fontes somam cinco implementações (M+N). Sem MCP, cada par vira um conector (M vezes N).'
   }
 }
 const idsDeConceito = Object.keys(CONCEITOS) as [string, ...string[]]
@@ -316,6 +337,7 @@ const exercicioDeCusto = ({ modelo }: { modelo: string }) => ({
   }]
 })
 
+const criarServidor = (): McpServer => {
 const servidor = new McpServer({ name: 'mcp-revisao-b1', version: '1.0.0' })
 
 // Tool. O modelo decide quando chamar. A description entra no tools/list
@@ -323,7 +345,7 @@ const servidor = new McpServer({ name: 'mcp-revisao-b1', version: '1.0.0' })
 // resource. Resource só entra no contexto se o cliente anexar.
 
 servidor.registerTool('listarTopicos', {
-  description: 'Lista os 4 blocos da B1 (prompt, padroes, agentes, riscos) e o título de cada slide, com o id para obterSlide. Chame antes de revisar.',
+  description: 'Lista os 5 blocos (prompt, padroes, agentes, riscos, mcp) e o título de cada slide, com o id para obterSlide. Chame antes de revisar.',
   inputSchema: { bloco: z.enum(idsDeBloco).optional().describe(`Restringe a um bloco: ${idsDeBloco.join(', ')}`) },
   annotations: { readOnlyHint: true, openWorldHint: false }
 }, listarTopicos)
@@ -345,7 +367,7 @@ servidor.registerTool('obterSlide', {
 }, obterSlide)
 
 servidor.registerTool('consultarConceito', {
-  description: 'Devolve a definição curta gravada no slide, com o link. Conceitos fechados da B1: Factory, Strategy, Adapter, Observer, ADR, regras/skills, RAG, ciclo de tool calling e prompt injection.',
+  description: 'Devolve a definição curta gravada no slide, com o link. Conceitos fechados: Factory, Strategy, Adapter, Observer, ADR, regras/skills, RAG, ciclo de tool calling, injeção, primitivos MCP, ciclo MCP, transporte e M+N.',
   inputSchema: { conceito: z.enum(idsDeConceito).describe(`Um de: ${idsDeConceito.join(', ')}`) },
   annotations: { readOnlyHint: true, openWorldHint: false }
 }, consultarConceito)
@@ -399,7 +421,7 @@ servidor.registerTool('listarModelos', {
 
 servidor.registerResource('conteudo-b1', 'b1://conteudo', {
   title: 'Conteúdo da avaliação B1',
-  description: 'Índice dos 53 slides cobrados na B1, agrupados em prompt, padroes, agentes e riscos, com link para o slides.md de cada aula da turma',
+  description: 'Índice dos slides da B1 e da aula de MCP, agrupados em prompt, padroes, agentes, riscos e mcp, com link para o slides.md de cada aula da turma',
   mimeType: 'text/markdown'
 }, lerConteudo)
 
@@ -419,7 +441,97 @@ servidor.registerPrompt('exercicio-de-custo', {
   argsSchema: { modelo: z.string().min(2).describe('Id do modelo, ex. claude-sonnet-5') }
 }, exercicioDeCusto)
 
-// O log vai para stderr porque stdout carrega as mensagens JSON-RPC.
-console.error(`mcp-revisao-b1 no ar, ${conteudo.itens.length} slides indexados, aguardando no stdio`)
+return servidor
+}
 
-await servidor.connect(new StdioServerTransport())
+const servirStdio = async (): Promise<void> => {
+  const servidor = criarServidor()
+  // O log vai para stderr porque stdout carrega as mensagens JSON-RPC.
+  console.error(`mcp-revisao-b1 no ar, ${conteudo.itens.length} slides indexados, aguardando no stdio`)
+  await servidor.connect(new StdioServerTransport())
+}
+
+const servirHttp = async (): Promise<void> => {
+  const host = process.env.MCP_HOST ?? '127.0.0.1'
+  const porta = Number(process.env.MCP_PORT ?? 3333)
+  const app = createMcpExpressApp({ host })
+  const sessoes = new Map<string, StreamableHTTPServerTransport | SSEServerTransport>()
+
+  // Streamable HTTP (spec 2025-03-26 em diante). Um único endpoint.
+  app.all('/mcp', async (req, res) => {
+    const sessionId = req.headers['mcp-session-id']
+    const sid = typeof sessionId === 'string' ? sessionId : undefined
+    try {
+      let transporte: StreamableHTTPServerTransport
+      const existente = sid ? sessoes.get(sid) : undefined
+      if (existente instanceof StreamableHTTPServerTransport) {
+        transporte = existente
+      } else if (!sid && req.method === 'POST' && isInitializeRequest(req.body)) {
+        transporte = new StreamableHTTPServerTransport({
+          sessionIdGenerator: () => randomUUID(),
+          onsessioninitialized: id => {
+            sessoes.set(id, transporte)
+          }
+        })
+        transporte.onclose = () => {
+          const id = transporte.sessionId
+          if (id) sessoes.delete(id)
+        }
+        await criarServidor().connect(transporte)
+      } else {
+        res.status(400).json({
+          jsonrpc: '2.0',
+          error: { code: -32000, message: 'sessão HTTP inválida. POST initialize em /mcp sem mcp-session-id.' },
+          id: null
+        })
+        return
+      }
+      await transporte.handleRequest(req, res, req.body)
+    } catch (erro) {
+      console.error('falha no transporte HTTP', erro)
+      if (!res.headersSent) {
+        res.status(500).json({
+          jsonrpc: '2.0',
+          error: { code: -32603, message: 'erro interno no transporte HTTP' },
+          id: null
+        })
+      }
+    }
+  })
+
+  // HTTP+SSE da spec 2024-11-05. Clientes antigos ainda usam. Preferir /mcp.
+  app.get('/sse', async (_req, res) => {
+    const transporte = new SSEServerTransport('/messages', res)
+    sessoes.set(transporte.sessionId, transporte)
+    res.on('close', () => sessoes.delete(transporte.sessionId))
+    await criarServidor().connect(transporte)
+  })
+
+  app.post('/messages', async (req, res) => {
+    const sid = typeof req.query.sessionId === 'string' ? req.query.sessionId : undefined
+    const transporte = sid ? sessoes.get(sid) : undefined
+    if (!(transporte instanceof SSEServerTransport)) {
+      res.status(400).send('sessionId SSE ausente ou inválido')
+      return
+    }
+    await transporte.handlePostMessage(req, res, req.body)
+  })
+
+  const web = join(import.meta.dirname, 'web')
+  app.get('/', (_req, res) => res.sendFile(join(web, 'index.html')))
+  app.get('/app.css', (_req, res) => res.sendFile(join(web, 'app.css')))
+  app.get('/app.js', (_req, res) => res.sendFile(join(web, 'app.js')))
+  app.get('/favicon.ico', (_req, res) => res.status(204).end())
+
+  await new Promise<void>((resolve, reject) => {
+    const http = app.listen(porta, host, () => resolve())
+    http.on('error', reject)
+  })
+  console.error(`mcp-revisao-b1 no ar, ${conteudo.itens.length} slides, HTTP em http://${host}:${porta}/mcp`)
+  console.error(`página cliente em http://${host}:${porta}/`)
+  console.error(`SSE legado (spec 2024-11-05) em GET http://${host}:${porta}/sse e POST /messages`)
+}
+
+const modoHttp = process.argv.includes('--http') || process.env.MCP_TRANSPORTE === 'http'
+if (modoHttp) await servirHttp()
+else await servirStdio()

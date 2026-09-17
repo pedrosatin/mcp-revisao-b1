@@ -9,6 +9,7 @@ RUN npm ci --omit=dev
 
 COPY servidor.ts ./
 COPY dados ./dados
+COPY web ./web
 
 USER node
 

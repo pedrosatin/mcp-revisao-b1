@@ -21,7 +21,8 @@ const AULAS: Aula[] = [
   { pasta: '2026-08-05-apresentacao-eng-prompt-contexto', bloco: 'prompt', titulo: 'Prompt e contexto', linhaMinima: 190 },
   { pasta: '2026-08-12-padroes-adr-trabalho', bloco: 'padroes', titulo: 'Padrões de projeto e ADR', linhaMinima: 0 },
   { pasta: '2026-08-26-rules-skills-toolcall-rag', bloco: 'agentes', titulo: 'Skills, rules, RAG e tool calling', linhaMinima: 0 },
-  { pasta: '2026-09-09-skills-riscos-cli', bloco: 'riscos', titulo: 'Riscos, prompt injection e ferramentas CLI', linhaMinima: 0 }
+  { pasta: '2026-09-09-skills-riscos-cli', bloco: 'riscos', titulo: 'Riscos, prompt injection e ferramentas CLI', linhaMinima: 0 },
+  { pasta: '2026-09-16-MCP', bloco: 'mcp', titulo: 'Protocolo MCP', linhaMinima: 0 }
 ]
 
 const semAcento = (s: string): string => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()

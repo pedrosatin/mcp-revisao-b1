@@ -9,6 +9,7 @@
   },
   "scripts": {
     "start": "node servidor.ts",
+    "start:http": "node servidor.ts --http",
     "gerar": "node gerar-indice.ts ../2026-tecnologias-emergentes-esoft8s-b"
   },
   "dependencies": {
