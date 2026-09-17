@@ -126,26 +126,51 @@ const textoDaTool = (result) => {
   return partes.filter(p => p.type === 'text').map(p => p.text).join('\n')
 }
 
-const ligarTrecho = (el, resto) => {
-  const re = /(https:\/\/[^\s)]+)/g
-  let ultimo = 0
-  let m
-  const frag = document.createDocumentFragment()
-  while ((m = re.exec(resto))) {
-    frag.append(resto.slice(ultimo, m.index))
-    const a = document.createElement('a')
-    a.href = m[1]
-    a.target = '_blank'
-    a.rel = 'noopener noreferrer'
-    a.textContent = m[1]
-    frag.append(a)
-    ultimo = m.index + m[1].length
+let mermaidApi = null
+const mermaidDe = async () => {
+  if (mermaidApi !== null) return mermaidApi
+  try {
+    const mod = await import('https://cdn.jsdelivr.net/npm/mermaid@11/+esm')
+    mod.default.initialize({
+      startOnLoad: false,
+      theme: 'neutral',
+      securityLevel: 'strict',
+      fontFamily: 'IBM Plex Sans, Segoe UI, sans-serif'
+    })
+    mermaidApi = mod.default
+  } catch {
+    mermaidApi = false
   }
-  frag.append(resto.slice(ultimo))
-  el.append(frag)
+  return mermaidApi
 }
 
-const preencherFicha = (el, texto) => {
+const renderMarkdown = async (el, md) => {
+  const marked = window.marked
+  const purify = window.DOMPurify
+  if (!marked?.parse || !purify?.sanitize) {
+    el.textContent = md
+    return
+  }
+  el.innerHTML = purify.sanitize(marked.parse(md, { gfm: true, breaks: false }))
+  el.querySelectorAll('a[href^="http"]').forEach(a => {
+    a.target = '_blank'
+    a.rel = 'noopener noreferrer'
+  })
+  const nos = []
+  el.querySelectorAll('pre code.language-mermaid').forEach(code => {
+    const div = document.createElement('div')
+    div.className = 'mermaid'
+    div.textContent = code.textContent
+    code.parentElement.replaceWith(div)
+    nos.push(div)
+  })
+  if (nos.length === 0) return
+  const mermaid = await mermaidDe()
+  if (!mermaid) return
+  try { await mermaid.run({ nodes: nos }) } catch { /* o pre original já foi trocado */ }
+}
+
+const preencherFicha = async (el, texto) => {
   el.textContent = ''
   el.classList.remove('vazio')
   const linhas = texto.split('\n')
@@ -214,10 +239,13 @@ const preencherFicha = (el, texto) => {
     corpoLinhas.push(linha)
   }
   if (campos.childNodes.length) el.append(campos)
-  const corpo = document.createElement('div')
-  corpo.className = 'corpo'
-  ligarTrecho(corpo, corpoLinhas.join('\n').replace(/^\n+|\n+$/g, ''))
-  if (corpo.textContent.trim() || corpo.querySelector('a')) el.append(corpo)
+  const md = corpoLinhas.join('\n').replace(/^\n+|\n+$/g, '')
+  if (md.length > 0) {
+    const corpo = document.createElement('div')
+    corpo.className = 'corpo md'
+    el.append(corpo)
+    await renderMarkdown(corpo, md)
+  }
   if (link) {
     const a = document.createElement('a')
     a.className = 'link-aula'
@@ -232,14 +260,15 @@ const preencherFicha = (el, texto) => {
   }
 }
 
-const ligarLinks = (el, texto) => {
-  if (texto.includes('\nlink: ') || texto.startsWith('## ')) {
-    preencherFicha(el, texto)
+const mostrar = async (el, texto) => {
+  if (/\nid: /.test(texto) && (texto.includes('\nlink: ') || texto.startsWith('## '))) {
+    await preencherFicha(el, texto)
     return
   }
   el.textContent = ''
   el.classList.remove('vazio')
-  ligarTrecho(el, texto)
+  el.classList.add('md')
+  await renderMarkdown(el, texto)
 }
 
 const chamarTool = async (name, args) => {
@@ -276,7 +305,7 @@ const abrirSlide = async (id, botao) => {
   slideEl.textContent = 'Lendo obterSlide…'
   try {
     const texto = await chamarTool('obterSlide', { slideId: id })
-    ligarLinks(slideEl, texto)
+    await mostrar(slideEl, texto)
   } catch (erro) {
     slideEl.textContent = erro.message
   }
@@ -376,7 +405,7 @@ $('form-busca').addEventListener('submit', async (ev) => {
   try {
     const args = { termo, limite: 5 }
     if (bloco) args.bloco = bloco
-    ligarLinks(saida, await chamarTool('consultarConteudo', args))
+    await mostrar(saida, await chamarTool('consultarConteudo', args))
   } catch (erro) {
     saida.textContent = erro.message
   }
@@ -387,7 +416,7 @@ $('form-conceito').addEventListener('submit', async (ev) => {
   const saida = $('conceito-saida')
   saida.textContent = 'consultando…'
   try {
-    ligarLinks(saida, await chamarTool('consultarConceito', { conceito: $('conceito').value }))
+    await mostrar(saida, await chamarTool('consultarConceito', { conceito: $('conceito').value }))
   } catch (erro) {
     saida.textContent = erro.message
   }
@@ -398,7 +427,7 @@ $('form-modelos').addEventListener('submit', async (ev) => {
   const saida = $('modelos-saida')
   saida.textContent = 'consultando o catálogo…'
   try {
-    saida.textContent = await chamarTool('listarModelos', { filtro: $('filtro').value.trim(), limite: 12 })
+    await mostrar(saida, await chamarTool('listarModelos', { filtro: $('filtro').value.trim(), limite: 12 }))
   } catch (erro) {
     saida.textContent = erro.message
   }
@@ -409,12 +438,12 @@ $('form-custo').addEventListener('submit', async (ev) => {
   const saida = $('custo-saida')
   saida.textContent = 'calculando…'
   try {
-    saida.textContent = await chamarTool('custoDaChamada', {
+    await mostrar(saida, await chamarTool('custoDaChamada', {
       modelo: $('modelo').value.trim(),
       tokensEntrada: Number($('tokens-in').value),
       tokensSaida: Number($('tokens-out').value),
       chamadas: Number($('chamadas').value)
-    })
+    }))
   } catch (erro) {
     saida.textContent = erro.message
   }
@@ -430,7 +459,7 @@ $('form-sortear').addEventListener('submit', async (ev) => {
     const bloco = $('bloco-sorteio').value
     if (bloco) args.bloco = bloco
     const texto = await chamarTool('sortearRevisao', args)
-    ligarLinks(saida, texto)
+    await mostrar(saida, texto)
     const id = texto.match(/^id: (\S+)/m)?.[1]
     if (id && !vistos.includes(id)) vistos.push(id)
   } catch (erro) {
@@ -446,7 +475,7 @@ $('form-plano').addEventListener('submit', async (ev) => {
     const args = {}
     const bloco = $('bloco-plano').value
     if (bloco) args.bloco = bloco
-    saida.textContent = await chamarTool('planoAteProva', args)
+    await mostrar(saida, await chamarTool('planoAteProva', args))
   } catch (erro) {
     saida.textContent = erro.message
   }
@@ -460,7 +489,7 @@ $('form-recurso').addEventListener('submit', async (ev) => {
     const uri = `b1://bloco/${$('bloco-recurso').value}`
     const result = await mcp('resources/read', { uri })
     const texto = result.contents?.map(c => c.text).join('\n\n') ?? JSON.stringify(result, null, 2)
-    ligarLinks(saida, texto)
+    await mostrar(saida, texto)
   } catch (erro) {
     saida.textContent = erro.message
   }

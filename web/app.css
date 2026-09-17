@@ -301,7 +301,7 @@ summary:focus-visible {
 .slide {
   font-size: 0.98rem;
   line-height: 1.55;
-  max-width: 42rem;
+  max-width: 52rem;
 }
 .slide h3 {
   font-size: 1.35rem;
@@ -321,9 +321,52 @@ summary:focus-visible {
   flex: 1 1 100%;
   word-break: break-all;
 }
-.slide .corpo {
-  white-space: pre-wrap;
+.slide .corpo, .saida.md {
+  white-space: normal;
   margin: 0 0 calc(var(--espaco) * 2);
+}
+.slide .corpo > *:first-child, .saida.md > *:first-child { margin-top: 0; }
+.slide .corpo table, .saida.md table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0 0 1rem;
+  font-size: 0.88rem;
+}
+.slide .corpo th, .slide .corpo td,
+.saida.md th, .saida.md td {
+  border: 1px solid var(--linha);
+  padding: 6px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+.slide .corpo th, .saida.md th { background: var(--papel); }
+.slide .corpo pre, .saida.md pre {
+  overflow: auto;
+  background: #fff;
+  border: 1px solid var(--linha);
+  padding: 10px 12px;
+  font-size: 0.82rem;
+  margin: 0 0 1rem;
+}
+.slide .corpo code, .saida.md code {
+  background: var(--sinal-fundo);
+  padding: 0.05em 0.28em;
+}
+.slide .corpo pre code, .saida.md pre code { background: transparent; padding: 0; }
+.slide .corpo ul, .slide .corpo ol, .saida.md ul, .saida.md ol {
+  margin: 0 0 1rem;
+  padding-left: 1.3rem;
+}
+.slide .corpo .mermaid, .saida.md .mermaid {
+  overflow: auto;
+  margin: 0 0 1rem;
+  background: #fff;
+  border: 1px solid var(--linha);
+  padding: 8px;
+}
+.slide .corpo .mermaid svg, .saida.md .mermaid svg {
+  max-width: 100%;
+  height: auto;
 }
 .slide .link-aula {
   display: inline-block;
@@ -381,8 +424,9 @@ summary:focus-visible {
   border-top: 1px solid var(--linha);
   padding-top: calc(var(--espaco) * 2);
   min-height: 3rem;
-  max-width: 46rem;
+  max-width: 52rem;
 }
+.saida.md { white-space: normal; }
 
 .protocolo {
   background: var(--protocolo);

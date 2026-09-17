@@ -52,12 +52,11 @@ const extrair = (markdown: string, aula: Aula): Item[] => {
     .map((c, i) => {
       const fim = cabecalhos[cabecalhos.indexOf(c) + 1]?.linha ?? linhas.length + 1
       const corpo = linhas.slice(c.linha, fim - 1)
-        .filter(l => !l.startsWith('```') && !l.startsWith('---') && l.trim().length > 0)
-        .join(' ')
-        .replace(/[*`#]/g, '')
-        .replace(/\s+/g, ' ')
+        .filter(l => l.trim() !== '---')
+        .join('\n')
+        .replace(/\n{3,}/g, '\n\n')
         .trim()
-      const trecho = corpo.length > 220 ? `${corpo.slice(0, 220)}...` : corpo
+      const paraBusca = corpo.replace(/```[\s\S]*?```/g, ' ').replace(/[*`#]/g, ' ')
       return {
         id: `${aula.bloco}-${String(i + 1).padStart(2, '0')}-${slugificar(c.titulo)}`,
         titulo: c.titulo,
@@ -65,8 +64,8 @@ const extrair = (markdown: string, aula: Aula): Item[] => {
         aula: aula.pasta,
         linha: c.linha,
         url: `${REPO}/blob/main/${aula.pasta}/slides.md#L${c.linha}`,
-        trecho,
-        termos: termosDe(c.titulo, trecho)
+        trecho: corpo,
+        termos: termosDe(c.titulo, paraBusca)
       }
     })
 }
