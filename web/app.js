@@ -1,18 +1,35 @@
 const MCP = window.MCP_URL ?? '/mcp'
 const PROTOCOLO = '2025-06-18'
+const RPC_CHAVE = 'mcp-revisao-b1-rpc-aberto'
 
 let proximoId = 1
 let sessao = null
+let rpcCount = 0
 
 const $ = id => document.getElementById(id)
 const statusEl = $('status')
+const statusTexto = $('status-texto')
 const logEl = $('log')
 const mapaEl = $('mapa')
 const slideEl = $('slide')
+const toggleEl = $('rpc-toggle')
+const corpoEl = $('rpc-corpo')
+const ultimaEl = $('rpc-ultima')
+const contagemEl = $('rpc-contagem')
+
+$('endpoint').textContent = MCP
 
 const setStatus = (texto, modo) => {
-  statusEl.textContent = texto
+  statusTexto.textContent = texto
   statusEl.className = `status${modo ? ` ${modo}` : ''}`
+}
+
+const rpcAberto = () => toggleEl.getAttribute('aria-expanded') === 'true'
+
+const aplicarDock = (aberto) => {
+  toggleEl.setAttribute('aria-expanded', String(aberto))
+  corpoEl.hidden = !aberto
+  try { localStorage.setItem(RPC_CHAVE, aberto ? '1' : '0') } catch { /* ignore */ }
 }
 
 const extrairSse = (bruto) => {
@@ -26,18 +43,54 @@ const extrairSse = (bruto) => {
 }
 
 const registrarLog = (pedido, resposta, ms, erro) => {
-  const li = document.createElement('li')
   const metodo = pedido.method === 'tools/call'
     ? `tools/call ${pedido.params?.name ?? ''}`
     : pedido.method
-  const meta = document.createElement('p')
-  meta.className = 'meta'
-  meta.textContent = `${metodo} · ${ms} ms${erro ? ' · erro' : ''}`
-  const pre = document.createElement('pre')
-  pre.textContent = JSON.stringify({ pedido, resposta }, null, 2)
-  li.append(meta, pre)
+  rpcCount += 1
+  contagemEl.textContent = String(rpcCount)
+  ultimaEl.textContent = `${metodo}, ${ms} ms${erro ? ', erro' : ''}`
+
+  const li = document.createElement('li')
+  li.className = erro ? 'rpc erro' : 'rpc'
+  const details = document.createElement('details')
+  details.open = true
+  const summary = document.createElement('summary')
+  const nome = document.createElement('span')
+  nome.className = 'metodo'
+  nome.textContent = metodo
+  const tempo = document.createElement('span')
+  tempo.className = 'ms'
+  tempo.textContent = `${ms} ms`
+  const estado = document.createElement('span')
+  estado.className = 'estado'
+  estado.textContent = erro ? 'erro' : 'ok'
+  summary.append(nome, tempo, estado)
+
+  const par = document.createElement('div')
+  par.className = 'rpc-par'
+  const pedidoSec = document.createElement('section')
+  const pedidoH = document.createElement('h3')
+  pedidoH.textContent = 'pedido'
+  const pedidoPre = document.createElement('pre')
+  pedidoPre.textContent = JSON.stringify(pedido, null, 2)
+  pedidoSec.append(pedidoH, pedidoPre)
+  const respSec = document.createElement('section')
+  const respH = document.createElement('h3')
+  respH.textContent = 'resposta'
+  const respPre = document.createElement('pre')
+  respPre.textContent = JSON.stringify(resposta, null, 2)
+  respSec.append(respH, respPre)
+  par.append(pedidoSec, respSec)
+  details.append(summary, par)
+  li.append(details)
   logEl.prepend(li)
-  while (logEl.children.length > 8) logEl.lastChild.remove()
+  for (const irmao of logEl.children) {
+    if (irmao !== li) {
+      const d = irmao.querySelector('details')
+      if (d) d.open = false
+    }
+  }
+  while (logEl.children.length > 12) logEl.lastChild.remove()
 }
 
 const mcp = async (method, params) => {
@@ -73,16 +126,7 @@ const textoDaTool = (result) => {
   return partes.filter(p => p.type === 'text').map(p => p.text).join('\n')
 }
 
-const ligarLinks = (el, texto) => {
-  el.textContent = ''
-  const linhas = texto.split('\n')
-  let resto = texto
-  if (linhas[0].startsWith('## ')) {
-    const h = document.createElement('h3')
-    h.textContent = linhas[0].slice(3)
-    el.append(h)
-    resto = linhas.slice(1).join('\n').replace(/^\n/, '')
-  }
+const ligarTrecho = (el, resto) => {
   const re = /(https:\/\/[^\s)]+)/g
   let ultimo = 0
   let m
@@ -99,6 +143,87 @@ const ligarLinks = (el, texto) => {
   }
   frag.append(resto.slice(ultimo))
   el.append(frag)
+}
+
+const preencherFicha = (el, texto) => {
+  el.textContent = ''
+  el.classList.remove('vazio')
+  const linhas = texto.split('\n')
+  let i = 0
+  if (linhas[0]?.startsWith('## ')) {
+    const h = document.createElement('h3')
+    h.textContent = linhas[0].slice(3)
+    el.append(h)
+    i = 1
+    while (linhas[i] === '') i += 1
+  }
+  const campos = document.createElement('p')
+  campos.className = 'campos'
+  const corpoLinhas = []
+  let link = ''
+  for (; i < linhas.length; i += 1) {
+    const linha = linhas[i]
+    const idBloco = linha.match(/^id:\s+(\S+)\s+\|\s+bloco:\s+(\S+)/)
+    if (idBloco) {
+      const a = document.createElement('span')
+      a.textContent = idBloco[1]
+      const b = document.createElement('span')
+      b.textContent = `bloco ${idBloco[2]}`
+      campos.append(a, b)
+      continue
+    }
+    const blocoId = linha.match(/^bloco:\s+(\S+)\s+\|\s+id:\s+(\S+)/)
+    if (blocoId) {
+      const a = document.createElement('span')
+      a.textContent = blocoId[2]
+      const b = document.createElement('span')
+      b.textContent = `bloco ${blocoId[1]}`
+      campos.append(a, b)
+      continue
+    }
+    const soBloco = linha.match(/^bloco:\s+(\S+)$/)
+    if (soBloco) {
+      const b = document.createElement('span')
+      b.textContent = `bloco ${soBloco[1]}`
+      campos.append(b)
+      continue
+    }
+    if (linha.startsWith('link: ')) {
+      link = linha.slice(6).trim()
+      continue
+    }
+    if (linha.startsWith('slide: ')) {
+      const b = document.createElement('span')
+      b.textContent = linha.slice(7)
+      campos.append(b)
+      continue
+    }
+    corpoLinhas.push(linha)
+  }
+  if (campos.childNodes.length) el.append(campos)
+  const corpo = document.createElement('div')
+  corpo.className = 'corpo'
+  ligarTrecho(corpo, corpoLinhas.join('\n').replace(/^\n+|\n+$/g, ''))
+  if (corpo.textContent.trim() || corpo.querySelector('a')) el.append(corpo)
+  if (link) {
+    const a = document.createElement('a')
+    a.className = 'link-aula'
+    a.href = link
+    a.target = '_blank'
+    a.rel = 'noopener noreferrer'
+    a.textContent = 'Abrir o slide no GitHub da turma'
+    el.append(a)
+  }
+}
+
+const ligarLinks = (el, texto) => {
+  if (texto.includes('\nlink: ') || texto.startsWith('## ')) {
+    preencherFicha(el, texto)
+    return
+  }
+  el.textContent = ''
+  el.classList.remove('vazio')
+  ligarTrecho(el, texto)
 }
 
 const chamarTool = async (name, args) => {
@@ -138,11 +263,17 @@ const abrirSlide = async (id, botao) => {
 
 const desenharMapa = (blocos) => {
   mapaEl.textContent = ''
-  for (const bloco of blocos) {
-    const sec = document.createElement('section')
+  blocos.forEach((bloco, indice) => {
+    const sec = document.createElement('details')
     sec.className = 'bloco'
-    const h = document.createElement('h3')
-    h.textContent = `${bloco.titulo} (${bloco.id}, ${bloco.n})`
+    if (indice === 0) sec.open = true
+    const sum = document.createElement('summary')
+    const titulo = document.createElement('span')
+    titulo.textContent = bloco.titulo
+    const meta = document.createElement('span')
+    meta.className = 'meta'
+    meta.textContent = `${bloco.id}, ${bloco.n}`
+    sum.append(titulo, meta)
     const ol = document.createElement('ol')
     for (const slide of bloco.slides) {
       const li = document.createElement('li')
@@ -153,14 +284,17 @@ const desenharMapa = (blocos) => {
       const idSpan = document.createElement('span')
       idSpan.className = 'id'
       idSpan.textContent = slide.id
-      b.replaceChildren(idSpan, document.createTextNode(` ${slide.titulo}`))
+      const titulo = document.createElement('span')
+      titulo.className = 'titulo-slide'
+      titulo.textContent = slide.titulo
+      b.append(idSpan, titulo)
       b.addEventListener('click', () => abrirSlide(slide.id, b))
       li.append(b)
       ol.append(li)
     }
-    sec.append(h, ol)
+    sec.append(sum, ol)
     mapaEl.append(sec)
-  }
+  })
 }
 
 const carregarMapa = async () => {
@@ -175,7 +309,7 @@ const carregarMapa = async () => {
 }
 
 const conectar = async () => {
-  setStatus(`initialize em ${MCP}…`)
+  setStatus(`initialize em ${MCP}`)
   const init = await mcp('initialize', {
     protocolVersion: PROTOCOLO,
     capabilities: {},
@@ -194,23 +328,25 @@ const conectar = async () => {
   }
   const versao = init.protocolVersion ?? PROTOCOLO
   const origem = sessao ? `sessão ${sessao.slice(0, 8)}` : 'stateless'
-  setStatus(`${origem} · protocolo ${versao} · ${MCP}`, 'ok')
+  setStatus(`${origem}, protocolo ${versao}`, 'ok')
   await carregarMapa()
 }
 
-document.querySelectorAll('.aba').forEach(aba => {
-  aba.addEventListener('click', () => {
-    const id = aba.dataset.aba
-    document.querySelectorAll('.aba').forEach(a => {
-      a.classList.toggle('ativa', a === aba)
-      if (a === aba) a.setAttribute('aria-current', 'page')
-      else a.removeAttribute('aria-current')
-    })
-    document.querySelectorAll('.painel').forEach(p => {
-      p.hidden = p.dataset.painel !== id
-    })
+const ativarAba = (id) => {
+  document.querySelectorAll('.aba').forEach(a => {
+    const ativa = a.dataset.aba === id
+    a.setAttribute('aria-selected', String(ativa))
   })
+  document.querySelectorAll('.painel').forEach(p => {
+    p.hidden = p.dataset.painel !== id
+  })
+}
+
+document.querySelectorAll('.aba').forEach(aba => {
+  aba.addEventListener('click', () => ativarAba(aba.dataset.aba))
 })
+
+toggleEl.addEventListener('click', () => aplicarDock(!rpcAberto()))
 
 $('form-busca').addEventListener('submit', async (ev) => {
   ev.preventDefault()
@@ -265,6 +401,17 @@ $('form-custo').addEventListener('submit', async (ev) => {
   }
 })
 
+{
+  let aberto
+  try {
+    const salvo = localStorage.getItem(RPC_CHAVE)
+    if (salvo === '1') aberto = true
+    else if (salvo === '0') aberto = false
+  } catch { /* ignore */ }
+  if (aberto === undefined) aberto = false
+  aplicarDock(aberto)
+}
+
 conectar().catch(erro => {
-  setStatus(`falha no handshake: ${erro.message}. Local: node servidor.ts --http. Remoto: Worker em ${MCP}.`, 'erro')
+  setStatus(`falha no handshake. ${erro.message}`, 'erro')
 })

@@ -3,144 +3,163 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#E8EDF2">
   <title>Revisão B1, cliente MCP</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Serif:ital,wght@0,500;0,600&display=swap">
   <link rel="stylesheet" href="app.css">
 </head>
 <body>
   <a class="skip" href="#principal">Ir para o conteúdo</a>
+
   <header class="topo">
     <div class="ident">
       <p class="marca">mcp-revisao-b1</p>
       <h1>Revisão da avaliação B1</h1>
     </div>
-    <p id="status" class="status" role="status">Conectando ao endpoint /mcp…</p>
+    <div class="liga">
+      <p id="status" class="status" role="status">
+        <span class="ponto" aria-hidden="true"></span>
+        <span id="status-texto">Conectando ao endpoint…</span>
+      </p>
+      <p class="endpoint" title="Endpoint JSON-RPC desta página"><code id="endpoint"></code></p>
+    </div>
   </header>
 
-  <nav class="abas" aria-label="Ferramentas">
-    <button type="button" class="aba ativa" data-aba="mapa" aria-current="page">Mapa da B1</button>
-    <button type="button" class="aba" data-aba="busca">Busca</button>
-    <button type="button" class="aba" data-aba="conceito">Conceito</button>
-    <button type="button" class="aba" data-aba="custo">Custo</button>
-  </nav>
-
-  <div class="grade">
-    <main id="principal">
-      <section id="painel-mapa" class="painel" data-painel="mapa">
-        <div class="duas">
-          <div>
-            <h2>Blocos</h2>
-            <p class="ajuda">A lista vem da tool <code>listarTopicos</code>. Clique num id para chamar <code>obterSlide</code>.</p>
-            <div id="mapa" aria-live="polite"></div>
-          </div>
-          <div>
-            <h2>Slide</h2>
-            <article id="slide" class="slide vazio">Nenhum slide aberto.</article>
-          </div>
-        </div>
-      </section>
-
-      <section id="painel-busca" class="painel" data-painel="busca" hidden>
-        <h2>Busca no índice</h2>
-        <form id="form-busca" class="form">
-          <p>
-            <label for="termo">Termo</label>
-            <input id="termo" name="termo" type="search" required minlength="2" placeholder="prompt injection">
-          </p>
-          <p>
-            <label for="bloco-busca">Bloco</label>
-            <select id="bloco-busca" name="bloco">
-              <option value="">todos</option>
-              <option value="prompt">prompt</option>
-              <option value="padroes">padroes</option>
-              <option value="agentes">agentes</option>
-              <option value="riscos">riscos</option>
-              <option value="mcp">mcp</option>
-            </select>
-          </p>
-          <p>
-            <button type="submit">consultarConteudo</button>
-          </p>
-        </form>
-        <div id="busca-saida" class="saida" aria-live="polite"></div>
-      </section>
-
-      <section id="painel-conceito" class="painel" data-painel="conceito" hidden>
-        <h2>Lookup fechado</h2>
-        <form id="form-conceito" class="form">
-          <p>
-            <label for="conceito">Conceito</label>
-            <select id="conceito" name="conceito" required>
-              <option value="factory">factory</option>
-              <option value="strategy">strategy</option>
-              <option value="adapter">adapter</option>
-              <option value="observer">observer</option>
-              <option value="adr">adr</option>
-              <option value="prompt-skill-regra">prompt-skill-regra</option>
-              <option value="rag">rag</option>
-              <option value="ciclo-tool-calling">ciclo-tool-calling</option>
-              <option value="injecao">injecao</option>
-              <option value="primitivos-mcp">primitivos-mcp</option>
-              <option value="ciclo-mcp">ciclo-mcp</option>
-              <option value="transporte-mcp">transporte-mcp</option>
-              <option value="integracoes-mcp">integracoes-mcp</option>
-            </select>
-          </p>
-          <p>
-            <button type="submit">consultarConceito</button>
-          </p>
-        </form>
-        <div id="conceito-saida" class="saida" aria-live="polite"></div>
-      </section>
-
-      <section id="painel-custo" class="painel" data-painel="custo" hidden>
-        <h2>Conta de uma chamada</h2>
-        <p class="ajuda">No Node local, <code>custoDaChamada</code> busca o catálogo LiteLLM na primeira execução do processo. No Worker, os preços vêm do JSON compacto gerado em <code>gerar-precos.ts</code>. <code>listarModelos</code> descobre o id aceito.</p>
-        <form id="form-modelos" class="form linha">
-          <p>
-            <label for="filtro">Filtro de modelo</label>
-            <input id="filtro" name="filtro" type="search" required minlength="2" value="claude" placeholder="claude, gemini, openai">
-          </p>
-          <p>
-            <button type="submit">listarModelos</button>
-          </p>
-        </form>
-        <div id="modelos-saida" class="saida" aria-live="polite"></div>
-        <form id="form-custo" class="form">
-          <p>
-            <label for="modelo">Id do modelo</label>
-            <input id="modelo" name="modelo" required minlength="2" value="claude-opus-5">
-          </p>
-          <p>
-            <label for="tokens-in">Tokens de entrada</label>
-            <input id="tokens-in" name="tokensEntrada" type="number" min="0" step="1" value="12000" required>
-          </p>
-          <p>
-            <label for="tokens-out">Tokens de saída</label>
-            <input id="tokens-out" name="tokensSaida" type="number" min="0" step="1" value="800" required>
-          </p>
-          <p>
-            <label for="chamadas">Chamadas iguais</label>
-            <input id="chamadas" name="chamadas" type="number" min="1" step="1" value="30" required>
-          </p>
-          <p>
-            <button type="submit">custoDaChamada</button>
-          </p>
-        </form>
-        <div id="custo-saida" class="saida" aria-live="polite"></div>
-      </section>
-    </main>
-
-    <aside class="protocolo" aria-label="Tráfego JSON-RPC">
-      <h2>JSON-RPC neste tab</h2>
-      <p class="ajuda">Esta página é um cliente MCP. Cada ação abaixo é <code>tools/call</code> em <code>POST</code> no endpoint configurado. No Node local o servidor devolve <code>mcp-session-id</code>. No Worker da Cloudflare cada POST é independente.</p>
-      <ol id="log" reversed></ol>
-    </aside>
+  <div class="abas" role="tablist" aria-label="Ferramentas">
+    <button type="button" class="aba" role="tab" id="tab-mapa" data-aba="mapa" aria-selected="true" aria-controls="painel-mapa">Mapa</button>
+    <button type="button" class="aba" role="tab" id="tab-busca" data-aba="busca" aria-selected="false" aria-controls="painel-busca">Busca</button>
+    <button type="button" class="aba" role="tab" id="tab-conceito" data-aba="conceito" aria-selected="false" aria-controls="painel-conceito">Conceito</button>
+    <button type="button" class="aba" role="tab" id="tab-custo" data-aba="custo" aria-selected="false" aria-controls="painel-custo">Custo</button>
   </div>
 
+  <main id="principal">
+    <section id="painel-mapa" class="painel" data-painel="mapa" role="tabpanel" aria-labelledby="tab-mapa">
+      <div class="duas">
+        <div class="indice">
+          <h2>Blocos da B1</h2>
+          <p class="ajuda">A lista chega por <code>listarTopicos</code>. O clique dispara <code>obterSlide</code>.</p>
+          <div id="mapa" aria-live="polite"></div>
+        </div>
+        <article class="ficha">
+          <h2>Slide</h2>
+          <div id="slide" class="slide vazio">Nenhum slide aberto. Escolha um id no mapa.</div>
+        </article>
+      </div>
+    </section>
+
+    <section id="painel-busca" class="painel" data-painel="busca" role="tabpanel" aria-labelledby="tab-busca" hidden>
+      <h2>Busca no índice</h2>
+      <form id="form-busca" class="form">
+        <p>
+          <label for="termo">Termo</label>
+          <input id="termo" name="termo" type="search" required minlength="2" placeholder="prompt injection">
+        </p>
+        <p>
+          <label for="bloco-busca">Bloco</label>
+          <select id="bloco-busca" name="bloco">
+            <option value="">todos</option>
+            <option value="prompt">prompt</option>
+            <option value="padroes">padroes</option>
+            <option value="agentes">agentes</option>
+            <option value="riscos">riscos</option>
+            <option value="mcp">mcp</option>
+          </select>
+        </p>
+        <p>
+          <button type="submit">consultarConteudo</button>
+        </p>
+      </form>
+      <div id="busca-saida" class="saida" aria-live="polite"></div>
+    </section>
+
+    <section id="painel-conceito" class="painel" data-painel="conceito" role="tabpanel" aria-labelledby="tab-conceito" hidden>
+      <h2>Lookup fechado</h2>
+      <form id="form-conceito" class="form">
+        <p>
+          <label for="conceito">Conceito</label>
+          <select id="conceito" name="conceito" required>
+            <option value="factory">factory</option>
+            <option value="strategy">strategy</option>
+            <option value="adapter">adapter</option>
+            <option value="observer">observer</option>
+            <option value="adr">adr</option>
+            <option value="prompt-skill-regra">prompt-skill-regra</option>
+            <option value="rag">rag</option>
+            <option value="ciclo-tool-calling">ciclo-tool-calling</option>
+            <option value="injecao">injecao</option>
+            <option value="primitivos-mcp">primitivos-mcp</option>
+            <option value="ciclo-mcp">ciclo-mcp</option>
+            <option value="transporte-mcp">transporte-mcp</option>
+            <option value="integracoes-mcp">integracoes-mcp</option>
+          </select>
+        </p>
+        <p>
+          <button type="submit">consultarConceito</button>
+        </p>
+      </form>
+      <div id="conceito-saida" class="saida" aria-live="polite"></div>
+    </section>
+
+    <section id="painel-custo" class="painel" data-painel="custo" role="tabpanel" aria-labelledby="tab-custo" hidden>
+      <h2>Conta de uma chamada</h2>
+      <p class="ajuda">Worker usa o JSON compacto de <code>gerar-precos.ts</code>. Node local consulta o LiteLLM na primeira chamada. <code>listarModelos</code> devolve o id aceito por <code>custoDaChamada</code>.</p>
+      <form id="form-modelos" class="form linha">
+        <p>
+          <label for="filtro">Filtro de modelo</label>
+          <input id="filtro" name="filtro" type="search" required minlength="2" value="claude" placeholder="claude, gemini, openai">
+        </p>
+        <p>
+          <button type="submit">listarModelos</button>
+        </p>
+      </form>
+      <div id="modelos-saida" class="saida" aria-live="polite"></div>
+      <form id="form-custo" class="form grade-custo">
+        <p>
+          <label for="modelo">Id do modelo</label>
+          <input id="modelo" name="modelo" required minlength="2" value="claude-opus-5">
+        </p>
+        <p>
+          <label for="tokens-in">Tokens de entrada</label>
+          <input id="tokens-in" name="tokensEntrada" type="number" min="0" step="1" value="12000" required>
+        </p>
+        <p>
+          <label for="tokens-out">Tokens de saída</label>
+          <input id="tokens-out" name="tokensSaida" type="number" min="0" step="1" value="800" required>
+        </p>
+        <p>
+          <label for="chamadas">Chamadas iguais</label>
+          <input id="chamadas" name="chamadas" type="number" min="1" step="1" value="30" required>
+        </p>
+        <p>
+          <button type="submit">custoDaChamada</button>
+        </p>
+      </form>
+      <div id="custo-saida" class="saida" aria-live="polite"></div>
+    </section>
+  </main>
+
+  <aside id="protocolo" class="protocolo" aria-label="Tráfego JSON-RPC">
+    <div class="proto-barra">
+      <button type="button" id="rpc-toggle" aria-expanded="false" aria-controls="rpc-corpo">
+        JSON-RPC
+        <span id="rpc-contagem" class="contagem">0</span>
+      </button>
+      <p id="rpc-ultima" class="rpc-ultima">Esta página é o cliente. Cada ação vira <code>POST</code> no endpoint.</p>
+    </div>
+    <div id="rpc-corpo" class="proto-corpo" hidden>
+      <p class="ajuda">Pedido e resposta da spec, no mesmo envelope que o Inspector mostra. No Worker cada POST é independente. No Node local o servidor devolve <code class="nowrap">mcp-session-id</code>.</p>
+      <ol id="log" reversed></ol>
+    </div>
+  </aside>
+
   <script>
-    window.MCP_URL = location.hostname === 'pedrosatin.github.io'
-      ? 'https://mcp-revisao-b1.satinp-dev.workers.dev/mcp'
-      : '/mcp'
+    const remoto = 'https://mcp-revisao-b1.satinp-dev.workers.dev/mcp'
+    const q = new URLSearchParams(location.search).get('mcp')
+    const escolhido = q && /^https?:\/\//i.test(q) ? q : null
+    window.MCP_URL = escolhido
+      || (location.hostname === 'pedrosatin.github.io' ? remoto : '/mcp')
   </script>
   <script src="app.js" type="module"></script>
 </body>
